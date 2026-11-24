@@ -4,13 +4,20 @@ GraphPilot: AI chat panel + MCP bridge for Adobe Substance 3D Designer (works wi
 Opens a TCP server on 127.0.0.1:9881 (newline-delimited JSON). Each request
 is executed on the Qt main thread (the SD API is not thread-safe).
 
-Request:  {"id": 1, "cmd": "exec", "code": "..."}      -> runs python
-          {"id": 2, "cmd": "call", "fn": "graph_info", "args": {...}}
+Every request must carry the session token. A new random token is made on each
+start and written, with the port, to <data dir>/bridge.json (a per-user folder),
+so only programs running as this user can talk to the bridge.
+
+Request:  {"id": 1, "token": "...", "cmd": "exec", "code": "..."}      -> runs python
+          {"id": 2, "token": "...", "cmd": "call", "fn": "graph_info", "args": {...}}
 Response: {"id": 1, "ok": true, "result": ..., "stdout": "..."}
 """
 import ast
+import hmac
 import io
 import json
+import os
+import secrets
 import socket
 import sys
 import threading
@@ -22,7 +29,24 @@ from PySide6 import QtCore
 HOST = "127.0.0.1"
 PORT = 9881
 
+if os.environ.get("APPDATA"):
+    DATA_DIR = os.path.join(os.environ["APPDATA"], "GraphPilot")
+elif sys.platform == "darwin":
+    DATA_DIR = os.path.expanduser("~/Library/Application Support/GraphPilot")
+else:
+    DATA_DIR = os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "GraphPilot")
+BRIDGE_FILE = os.path.join(DATA_DIR, "bridge.json")
+
 _server = None
+
+
+def _write_bridge_file(token):
+    os.makedirs(DATA_DIR, exist_ok=True)
+    tmp = BRIDGE_FILE + ".tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)   # owner-only on macOS/Linux
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump({"host": HOST, "port": PORT, "token": token, "pid": os.getpid()}, f)
+    os.replace(tmp, BRIDGE_FILE)
 
 
 class _Dispatcher(QtCore.QObject):
@@ -48,6 +72,7 @@ class _Server:
         self.namespace = None
         self.sock = None
         self.alive = True
+        self.token = secrets.token_urlsafe(32)
         self.thread = threading.Thread(target=self._serve, daemon=True)
         self.thread.start()
 
@@ -133,7 +158,11 @@ class _Server:
                     continue
                 try:
                     req = json.loads(line.decode("utf-8"))
-                    resp = self._run_on_main(req)
+                    if not hmac.compare_digest(str(req.get("token", "")).encode(), self.token.encode()):
+                        resp = {"id": req.get("id"), "ok": False,
+                                "error": "GraphPilot bridge: missing or wrong token (see bridge.json)"}
+                    else:
+                        resp = self._run_on_main(req)
                 except Exception:
                     resp = {"ok": False, "error": traceback.format_exc()}
                 try:
@@ -150,6 +179,10 @@ class _Server:
         s.bind((HOST, PORT))
         s.listen(4)
         self.sock = s
+        try:
+            _write_bridge_file(self.token)
+        except Exception:
+            traceback.print_exc()
         print("[GraphPilot] listening on %s:%d" % (HOST, PORT))
         while self.alive:
             try:
@@ -162,6 +195,13 @@ class _Server:
         self.alive = False
         try:
             self.sock.close()
+        except Exception:
+            pass
+        try:
+            with open(BRIDGE_FILE, encoding="utf-8") as f:
+                mine = json.load(f).get("token") == self.token
+            if mine:
+                os.remove(BRIDGE_FILE)
         except Exception:
             pass
 

@@ -34,7 +34,8 @@ Works with **[Claude Code](https://claude.com/claude-code)** or **[OpenAI Codex]
 
 ## Requirements
 
-- Adobe Substance 3D Designer **16.0** or newer (tested on 16.0.3, Windows).
+- **Windows** and Adobe Substance 3D Designer **16.0** or newer (tested on 16.0.3).
+  macOS support is in the code but has not been tested yet: if you try it, please report in [Issues](../../issues).
 - One of:
   - **Claude Code**, installed and signed in: install it from [claude.com/claude-code](https://claude.com/claude-code), then run `claude` once in a terminal and log in.
   - **Codex CLI**, installed and signed in: `npm i -g @openai/codex`, then run `codex login` once and sign in with ChatGPT.
@@ -46,7 +47,7 @@ Nothing else: the MCP server that connects the assistant to Designer ships with 
 1. Download `GraphPilot-<version>.zip` from [Releases](../../releases) (or Gumroad).
 2. Unzip it and copy the **`graphpilot`** folder into Designer's user plugins folder:
    - Windows: `Documents\Adobe\Adobe Substance 3D Designer\python\sduserplugins\`
-   - macOS: `~/Documents/Adobe/Adobe Substance 3D Designer/python/sduserplugins/`
+   - macOS (untested): `~/Documents/Adobe/Adobe Substance 3D Designer/python/sduserplugins/`
 3. Restart Designer. The **GraphPilot** panel appears. If it doesn't, check that GraphPilot is enabled in *Tools ▸ Plugin Manager*.
 
 To update, replace the `graphpilot` folder and restart Designer. Your chats and settings are kept.
@@ -61,8 +62,8 @@ To update, replace the `graphpilot` folder and restart Designer. Your chats and 
 ## Privacy & security
 
 - Your messages, graph information and attached images are sent to Anthropic (through Claude Code) or OpenAI (through Codex), under your account's terms with that provider. GraphPilot itself has no servers and collects nothing.
-- Chats are stored locally: `%APPDATA%\GraphPilot` (Windows), `~/Library/Application Support/GraphPilot` (macOS).
-- The plugin opens a bridge on **127.0.0.1:9881** (local machine only) that runs Python inside Designer — that is how Claude edits the graph. Any program on your computer could use it while Designer is running, so only run software you trust.
+- Chats and the bridge token are stored locally: `%APPDATA%\GraphPilot` (Windows), `~/Library/Application Support/GraphPilot` (macOS).
+- The plugin opens a bridge on **127.0.0.1:9881** (local machine only) that runs Python inside Designer — that is how the assistant edits the graph. Each request must carry a random token that is regenerated on every Designer start and stored in `bridge.json` in the folder above, which only your user account can read. Programs running under your account can still read it, so only run software you trust.
 - In the panel Claude may use the Designer tools, read files (`Read`, `Glob`, `Grep`) and search the web. Codex runs in its read-only sandbox plus the Designer tools. One of the Designer tools runs Python inside Designer, so in practice Claude has the same access to your computer as Designer itself. Review what it does in the tool steps.
 
 ## Troubleshooting

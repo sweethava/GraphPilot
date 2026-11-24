@@ -282,7 +282,17 @@ def create_node(definition=None, library=None, library_graph=None, x=0, y=0,
                 params=None, graph_id=None):
     g = graph(graph_id)
     if library:
-        n = g.newInstanceNode(_library_resource(library, library_graph))
+        open_before = {p.getFilePath() for p in _pm().getUserPackages()}
+        res = _library_resource(library, library_graph)
+        n = g.newInstanceNode(res)
+        # we opened the library package only to reach its graph: close it again so it doesn't
+        # pile up in the Explorer (the instance keeps working, Designer holds it as a dependency)
+        lib_pkg = res.getPackage()
+        if lib_pkg is not None and lib_pkg.getFilePath() not in open_before:
+            try:
+                _pm().unloadUserPackage(lib_pkg)
+            except BaseException:
+                pass
     else:
         if "::" not in definition:
             definition = "sbs::compositing::" + definition

@@ -12,14 +12,33 @@ import socket
 import sys
 
 HOST = "127.0.0.1"
-PORT = int(os.environ.get("SD_BRIDGE_PORT") or 9881)
 _seq = itertools.count(1)
+
+if os.environ.get("APPDATA"):
+    _DATA_DIR = os.path.join(os.environ["APPDATA"], "GraphPilot")
+elif sys.platform == "darwin":
+    _DATA_DIR = os.path.expanduser("~/Library/Application Support/GraphPilot")
+else:
+    _DATA_DIR = os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "GraphPilot")
+
+
+def _bridge():
+    """(port, token) of the running Designer. Re-read on every call: the token changes on each Designer start."""
+    info = {}
+    try:
+        with open(os.path.join(_DATA_DIR, "bridge.json"), encoding="utf-8") as f:
+            info = json.load(f)
+    except Exception:
+        pass
+    port = int(os.environ.get("SD_BRIDGE_PORT") or info.get("port") or 9881)
+    return port, os.environ.get("SD_BRIDGE_TOKEN") or info.get("token") or ""
 
 
 def sd_request(payload, timeout=300):
+    PORT, token = _bridge()
     try:
         with socket.create_connection((HOST, PORT), timeout=timeout) as s:
-            s.sendall((json.dumps(dict(payload, id=next(_seq))) + "\n").encode("utf-8"))
+            s.sendall((json.dumps(dict(payload, id=next(_seq), token=token)) + "\n").encode("utf-8"))
             buf = b""
             while b"\n" not in buf:
                 chunk = s.recv(65536)

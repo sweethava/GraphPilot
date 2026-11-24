@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Security: the local Designer bridge now requires a per-session random token (stored in `bridge.json` in the GraphPilot data folder). Other users and programs without access to your profile can no longer run code in Designer.
+- Library nodes: the library package opened to place a node is closed again, so packages no longer pile up in the Explorer.
+- README: Windows is the supported platform; macOS is untested.
+
 ## 1.1.0 — 2026-11-24
 
 - **ChatGPT support** through OpenAI Codex CLI: use your ChatGPT plan instead of Claude. Pick the assistant in Settings; each chat keeps the assistant it was started with.
