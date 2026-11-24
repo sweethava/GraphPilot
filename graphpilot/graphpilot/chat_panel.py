@@ -1,8 +1,8 @@
-"""Dockable GraphPilot chat panel (basic widget fallback) inside Substance Designer.
+"""Shared launch settings for the assistant CLIs, plus a basic widget chat panel.
 
-Runs Claude Code headless (`claude -p ... --output-format stream-json`) and keeps
-the conversation via --resume. Claude talks back to Designer through the
-substance-designer MCP server -> this plugin's TCP bridge.
+The basic panel is only a fallback for when the QML panel (chat_qml.py) can't load.
+It uses the same agent adapters (agents.py): Claude Code or Codex, whichever is
+selected in Settings, talking to Designer through the bundled MCP server.
 """
 import html
 import json
@@ -85,9 +85,17 @@ def child_env():
     return env
 
 
-class ClaudeChat(QtWidgets.QWidget):
+class BasicChat(QtWidgets.QWidget):
+    """Plain-widget fallback panel."""
+
     def __init__(self, parent=None):
         super().__init__(parent)
+        from . import agents, i18n
+        st = QtCore.QSettings("GraphPilot", "GraphPilot")
+        aid = str(st.value("agent", "claude") or "claude")
+        self.agent = agents.AGENTS.get(aid, agents.AGENTS["claude"])
+        self.model = str(st.value("model/" + self.agent.id, "") or "") or self.agent.default_model({})
+        self.tr = i18n.table(i18n.resolve(str(st.value("language", "auto") or "auto")))
         self.session_id = None
         self.proc = None
         self._buf = b""
@@ -97,7 +105,7 @@ class ClaudeChat(QtWidgets.QWidget):
         self.view = QtWidgets.QTextBrowser()
         self.view.setOpenExternalLinks(True)
         self.input = QtWidgets.QPlainTextEdit()
-        self.input.setPlaceholderText("Напиши Claude… (Ctrl+Enter — отправить)")
+        self.input.setPlaceholderText("Message %s… (Ctrl+Enter to send)" % self.agent.label)
         self.input.setFixedHeight(80)
         self.input.installEventFilter(self)
         self.send_btn = QtWidgets.QPushButton("Send")
@@ -135,7 +143,7 @@ class ClaudeChat(QtWidgets.QWidget):
     def _render(self):
         md = self._md + (self._live if self._live else "")
         if not md:
-            md = "_Claude готов. Спроси что-нибудь про открытый граф._"
+            md = "_GraphPilot basic panel (%s). Ask about the open graph._" % self.agent.label
         self.view.setMarkdown(md)
         sb = self.view.verticalScrollBar()
         sb.setValue(sb.maximum())
@@ -144,12 +152,15 @@ class ClaudeChat(QtWidgets.QWidget):
         self._md += text
         self._render()
 
+    def _missing(self):
+        return self.tr.get("cant_start" if self.agent.id == "claude" else "codex_missing", "")
+
     def new_chat(self):
         self.stop()
         self.session_id = None
         self._md = ""
         self._live = ""
-        self.status.setText("new session")
+        self.status.setText("New chat")
         self._render()
 
     # ---------------------------------------------------------------- process
@@ -157,48 +168,50 @@ class ClaudeChat(QtWidgets.QWidget):
         msg = self.input.toPlainText().strip()
         if not msg or (self.proc and self.proc.state() != QtCore.QProcess.NotRunning):
             return
+        exe = self.agent.find()
         self.input.clear()
-        self._append("\n\n---\n\n**Ты:** " + msg + "\n\n")
-        args = ["-p", msg, "--output-format", "stream-json", "--verbose",
-                "--include-partial-messages", *claude_base_args()]
-        if self.session_id:
-            args += ["--resume", self.session_id]
+        self._append("\n\n---\n\n**You:** " + msg + "\n\n")
+        if not exe:
+            self._append("> ⚠ %s\n\n" % self._missing())
+            return
+        args, stdin_text = self.agent.build(msg, self.model, self.session_id, [])
         self.proc = QtCore.QProcess(self)
         self.proc.setWorkingDirectory(WORKDIR)
-        self.proc.setProcessEnvironment(child_env())
+        self.proc.setProcessEnvironment(self.agent.env(child_env()))
         self.proc.readyReadStandardOutput.connect(self._on_stdout)
         self.proc.readyReadStandardError.connect(self._on_stderr)
         self.proc.finished.connect(self._on_finished)
         self.proc.errorOccurred.connect(self._on_error)
         self._buf = b""
         self._live = ""
-        self.proc.start(_find_claude() or "claude", args)
+        self.proc.start(exe, args)
+        if stdin_text is not None:
+            self.proc.write(stdin_text.encode("utf-8"))
         self.proc.closeWriteChannel()
         self.send_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
-        self.status.setText("thinking…")
+        self.status.setText("Thinking…")
 
     def stop(self):
         if self.proc and self.proc.state() != QtCore.QProcess.NotRunning:
             self.proc.kill()
 
     def _on_error(self, err):
-        self._append("\n\n> ⚠ не удалось запустить claude: %s\n" % err)
+        if err == QtCore.QProcess.FailedToStart:
+            self._append("\n\n> ⚠ %s\n" % self._missing())
 
     def _on_stderr(self):
         data = bytes(self.proc.readAllStandardError()).decode("utf-8", "replace").strip()
         if data:
-            print("[GraphPilot] claude stderr:", data)
+            print("[GraphPilot] %s stderr:" % self.agent.id, data[-2000:])
 
     def _on_finished(self, *a):
         self._on_stdout()
-        if self._live:
-            self._md += self._live
-            self._live = ""
+        self._commit_live()
         self.send_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
-        if self.status.text() in ("thinking…",) or self.status.text().startswith("tool"):
-            self.status.setText("done")
+        if self.status.text() == "Thinking…" or self.status.text().startswith("Tool"):
+            self.status.setText("Done")
         self._render()
 
     def _on_stdout(self):
@@ -214,40 +227,43 @@ class ClaudeChat(QtWidgets.QWidget):
                 ev = json.loads(line.decode("utf-8", "replace"))
             except Exception:
                 continue
-            self._handle(ev)
+            try:
+                for e in self.agent.parse(ev):
+                    self._handle(e)
+            except Exception as e:
+                print("[GraphPilot] event error:", e)
         self._render()
 
-    def _handle(self, ev):
-        t = ev.get("type")
-        if ev.get("session_id"):
-            self.session_id = ev["session_id"]
-        if t == "stream_event":
-            e = ev.get("event", {})
-            if e.get("type") == "content_block_delta" and e.get("delta", {}).get("type") == "text_delta":
-                if not self._live:
-                    self._live = "**Claude:** "
-                self._live += e["delta"].get("text", "")
-        elif t == "assistant":
-            # full message arrived: commit streamed text, show tool calls
-            for block in ev.get("message", {}).get("content", []):
-                if block.get("type") == "text":
-                    if self._live:
-                        self._md += self._live + "\n\n"
-                        self._live = ""
-                    else:
-                        self._md += "**Claude:** " + block.get("text", "") + "\n\n"
-                elif block.get("type") == "tool_use":
-                    if self._live:
-                        self._md += self._live + "\n\n"
-                        self._live = ""
-                    name = block.get("name", "").replace("mcp__substance-designer__", "")
-                    self._md += "`⚙ %s`\n\n" % name
-                    self.status.setText("tool: " + name)
-        elif t == "result":
-            if ev.get("is_error"):
-                self._md += "\n\n> ⚠ %s\n\n" % (ev.get("result") or ev.get("subtype"))
-            cost = ev.get("total_cost_usd")
-            self.status.setText("done" + (" · $%.3f" % cost if cost else ""))
+    def _commit_live(self):
+        if self._live:
+            self._md += self._live + "\n\n"
+            self._live = ""
+
+    def _handle(self, e):
+        """Normalized agent events (see agents.py)."""
+        t = e["t"]
+        who = "**%s:** " % self.agent.label
+        if t == "session":
+            self.session_id = e["id"]
+        elif t == "delta":
+            if not self._live:
+                self._live = who
+            self._live += e["text"]
+        elif t == "text":
+            if self._live:
+                self._commit_live()
+            else:
+                self._md += who + e["text"] + "\n\n"
+        elif t == "tool":
+            self._commit_live()
+            self._md += "`⚙ %s`\n\n" % e["name"]
+            self.status.setText("Tool: " + e["name"])
+        elif t == "error":
+            self._md += "\n\n> ⚠ %s\n\n" % e["text"]
+        elif t == "done":
+            if e.get("error"):
+                self._md += "\n\n> ⚠ %s\n\n" % e["error"]
+            self.status.setText("Done")
 
 
 _dock_widget = None
@@ -257,7 +273,7 @@ def create_dock(ui_mgr):
     """Create the dock via Designer's UI manager (Window menu lists it)."""
     global _dock_widget
     dock = ui_mgr.newDockWidget("graphpilot_panel", "GraphPilot")
-    chat = ClaudeChat(dock)
+    chat = BasicChat(dock)
     lay = QtWidgets.QVBoxLayout(dock)
     lay.setContentsMargins(0, 0, 0, 0)
     lay.addWidget(chat)
