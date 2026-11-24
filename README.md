@@ -41,8 +41,10 @@ Works with **[Claude Code](https://claude.com/claude-code)** or **[OpenAI Codex]
 - **Windows** and Adobe Substance 3D Designer **16.0** or newer (tested on 16.0.3).
   macOS support is in the code but has not been tested yet: if you try it, please report in [Issues](../../issues).
 - One of:
-  - **Claude Code**, installed and signed in: install it from [claude.com/claude-code](https://claude.com/claude-code), then run `claude` once in a terminal and log in.
-  - **Codex CLI**, installed and signed in: `npm i -g @openai/codex`, then run `codex login` once and sign in with ChatGPT.
+  - **Claude Code** with a Claude subscription (Pro / Max) or an Anthropic API key.
+  - **Codex CLI** with a ChatGPT plan. Codex installs through npm, so it also needs [Node.js](https://nodejs.org/).
+
+You don't need a terminal: if the assistant isn't installed or you aren't signed in, the panel shows **Install** / **Sign in** buttons. They run the official installer and the official sign-in, which opens your browser. (Or do it yourself: install from [claude.com/claude-code](https://claude.com/claude-code) and run `claude auth login`; for Codex `npm i -g @openai/codex` and `codex login`.)
 
 Nothing else: the MCP server that connects the assistant to Designer ships with the plugin and runs on the Python that comes with Designer.
 
@@ -74,9 +76,8 @@ To update, replace the `graphpilot` folder and restart Designer. Your chats and 
 
 | Problem | Fix |
 |---|---|
-| "Claude Code not found" | Install Claude Code, run `claude` in a terminal once, restart Designer. |
-| "Codex not found" / "run codex login" in Settings | `npm i -g @openai/codex`, then `codex login` in a terminal. Reopen Settings. |
-| "Invalid API key / please run /login" | Run `claude` in a terminal and sign in again. |
+| The Install button fails | Install by hand: Claude Code from [claude.com/claude-code](https://claude.com/claude-code); Codex with `npm i -g @openai/codex` (needs Node.js). Then reopen Settings. |
+| Sign-in doesn't finish | Press **Open sign-in page** and finish in the browser, or run `claude auth login` / `codex login` in a terminal. |
 | "Cannot reach the Substance Designer bridge" | Another program uses port 9881, or a second Designer instance is running. Close it and restart Designer. |
 | Fable says it "requires usage credits" | Your plan doesn't include Fable; pick another model. |
 

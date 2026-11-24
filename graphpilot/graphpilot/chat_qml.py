@@ -10,6 +10,7 @@ import os
 import re
 import shutil
 import sys
+import threading
 import time
 
 from PySide6 import QtCore, QtGui, QtWidgets
@@ -21,6 +22,7 @@ from . import i18n
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO_URL = "https://github.com/sweethava/GraphPilot"
+AUTHOR_URL = "https://github.com/sweethava"
 
 
 def _plugin_version():
@@ -263,6 +265,13 @@ class ChatBackend(QObject):
         self._resolved = {m: str(st.value("resolved/" + m, "") or "") for m in agents.ClaudeAgent.MODELS}
         self._run_started = 0.0
         self._last_error = ""
+        self._states = {}          # agent id -> agents.MISSING / LOGGED_OUT / READY (absent = not checked yet)
+        self._setup = None         # the install / sign-in card: {"agent", "kind", "busy", "url", "log", "error"}
+        self._setup_proc = None
+        self._setup_out = ""
+        self._pending = None       # (prompt, images, agent id) to send once setup is done
+        self._statesReady.connect(self._on_states, Qt.QueuedConnection)
+        self.refreshAgents()
         self._tr = i18n.table(i18n.resolve(self._lang_setting))
         # chat history
         self._chat_id = None
@@ -401,21 +410,224 @@ class ChatBackend(QObject):
 
     agentSetting = Property(str, _get_agent_setting, notify=modelChanged)
 
+    def _state(self, aid):
+        st = self._states.get(aid)
+        if st is None:      # not checked yet: cheap guess from files on disk
+            a = agents.AGENTS[aid]
+            st = agents.READY if a.ready() else (agents.LOGGED_OUT if a.find() else agents.MISSING)
+        return st
+
     def _get_agents(self):
         out = []
         for aid in agents.ORDER:
             a = agents.AGENTS[aid]
-            found = bool(a.find())
-            hint = "" if a.ready() else (self.t("agent_login") if found else self.t("agent_missing"))
-            out.append({"id": aid, "label": a.label, "ready": a.ready(), "hint": hint})
+            st = self._state(aid)
+            hint = {agents.MISSING: self.t("agent_missing"), agents.LOGGED_OUT: self.t("agent_login")}.get(st, "")
+            action = {agents.MISSING: self.t("btn_install"), agents.LOGGED_OUT: self.t("btn_signin")}.get(st, "")
+            out.append({"id": aid, "label": a.label, "ready": st == agents.READY, "state": st,
+                        "hint": hint, "action": action})
         return out
 
     agentList = Property("QVariantList", _get_agents, notify=modelChanged)
 
+    _statesReady = Signal(object)
+
     @Slot()
     def refreshAgents(self):
-        """Re-check installs/logins (the user may have just run `codex login`)."""
+        """Re-check installs and sign-ins in the background (a quick `auth status` per CLI)."""
+        def work():
+            res = {}
+            for aid in agents.ORDER:
+                try:
+                    res[aid] = agents.AGENTS[aid].status()
+                except Exception:
+                    pass
+            try:
+                self._statesReady.emit(res)
+            except RuntimeError:
+                pass        # panel was closed meanwhile
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_states(self, res):
+        self._states.update(res)
         self.modelChanged.emit()
+
+    # ------------------------------------------------------------ setup: install / sign in
+    setupChanged = Signal()
+
+    @staticmethod
+    def _names(aid):
+        """(program to install, account to sign in with)"""
+        return ("Claude Code", "Claude") if aid == "claude" else ("Codex", "ChatGPT")
+
+    def _get_setup(self):
+        st = self._setup
+        if not st:
+            return {}
+        prog, acct = self._names(st["agent"])
+        kind, busy = st["kind"], st.get("busy")
+        button = ""
+        if busy == "install":
+            title, text = self.t("installing") % prog, st.get("log") or ""
+        elif busy == "login":
+            title, text = self.t("setup_login_t") % acct, self.t("signing_in")
+        elif kind == agents.MISSING:
+            title, text, button = self.t("setup_missing_t") % prog, self.t("setup_missing_b") % prog, self.t("btn_install")
+        elif kind == "no_node":
+            title, text, button = self.t("setup_node_t"), self.t("setup_node_b"), self.t("btn_get_node")
+        else:
+            title, text, button = self.t("setup_login_t") % acct, self.t("setup_login_b") % acct, self.t("btn_signin")
+        if st.get("error") and not busy:
+            text = (text + "\n" if text else "") + self.t("setup_failed") % st["error"]
+        return {"title": title, "text": text, "button": button, "busy": bool(busy),
+                "url": st.get("url", "") if busy == "login" else "",
+                "openPage": self.t("btn_open_page"),
+                "cancel": self.t("btn_cancel") if busy else self.t("btn_later")}
+
+    setup = Property("QVariantMap", _get_setup, notify=setupChanged)
+
+    def _show_setup(self, aid, kind, error=""):
+        self._setup = {"agent": aid, "kind": kind, "busy": None, "url": "", "log": "", "error": error}
+        self._set_status("")
+        self.setupChanged.emit()
+
+    @Slot(str)
+    def startSetup(self, aid):
+        """From Settings: install or sign in to the given assistant right away."""
+        if aid not in agents.AGENTS or (self._setup and self._setup.get("busy")):
+            return
+        st = agents.AGENTS[aid].status()
+        self._states[aid] = st
+        self.modelChanged.emit()
+        if st == agents.READY:
+            return
+        self._show_setup(aid, st)
+        self.runSetup()
+
+    @Slot()
+    def runSetup(self):
+        st = self._setup
+        if not st or st.get("busy"):
+            return
+        a = agents.AGENTS[st["agent"]]
+        if st["kind"] == "no_node":
+            self.openUrl(agents.CodexAgent.NODE_URL)
+            st["kind"] = agents.MISSING            # next press: try installing again
+            self.setupChanged.emit()
+            return
+        if st["kind"] == agents.MISSING:
+            cmd = a.install_command()
+            if cmd is None:
+                st["kind"], st["error"] = "no_node", ""
+                self.setupChanged.emit()
+                return
+            prog, args = cmd
+            st["busy"] = "install"
+            env = chat_panel.child_env()
+        else:
+            exe = a.find()
+            if not exe:
+                st["kind"] = agents.MISSING
+                self.setupChanged.emit()
+                return
+            prog, args = exe, a.login_args()
+            st["busy"] = "login"
+            env = a.env(chat_panel.child_env())
+        st.update(error="", log="", url="", cancelled=False)
+        proc = QtCore.QProcess(self)
+        proc.setProcessEnvironment(env)
+        proc.setWorkingDirectory(chat_panel.WORKDIR)
+        proc.setProcessChannelMode(QtCore.QProcess.MergedChannels)
+        proc.readyReadStandardOutput.connect(self._on_setup_out)
+        proc.finished.connect(self._on_setup_done)
+        proc.errorOccurred.connect(self._on_setup_error)
+        self._setup_proc, self._setup_out = proc, ""
+        proc.start(prog, args)
+        if st["busy"] == "install":
+            proc.closeWriteChannel()    # sign-in keeps stdin open: Claude may ask to paste a code
+        self.setupChanged.emit()
+
+    def _on_setup_out(self):
+        proc, st = self._setup_proc, self._setup
+        if not proc or not st:
+            return
+        self._setup_out = (self._setup_out + bytes(proc.readAllStandardOutput()).decode("utf-8", "replace"))[-20000:]
+        clean = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", self._setup_out)
+        if st.get("busy") == "login" and not st.get("url"):
+            m = re.search(r"https://\S+", clean)
+            if m:
+                st["url"] = m.group(0)
+        lines = [l.strip() for l in re.split(r"[\r\n]+", clean) if l.strip()]
+        st["log"] = lines[-1][:140] if lines else ""
+        self.setupChanged.emit()
+
+    def _on_setup_error(self, err):
+        if err == QtCore.QProcess.FailedToStart:
+            self._on_setup_done(-1, None)
+
+    def _on_setup_done(self, code=0, status=None):
+        proc, self._setup_proc = self._setup_proc, None
+        if proc is None:
+            return
+        try:
+            self._on_setup_out_final(proc)
+            proc.deleteLater()
+        except RuntimeError:
+            pass
+        st = self._setup
+        if not st:
+            return
+        a = agents.AGENTS[st["agent"]]
+        was, st["busy"] = st.get("busy"), None
+        state = a.status()
+        self._states[a.id] = state
+        self.modelChanged.emit()
+        if state == agents.READY:
+            self._setup = None
+            self.setupChanged.emit()
+            self._set_status(self.t("setup_done") % self._names(a.id)[1])
+            pend, self._pending = self._pending, None
+            if pend and not self._busy and pend[2] == self._agent_id:
+                self._run(pend[0], pend[1])
+            return
+        if was == "install" and state == agents.LOGGED_OUT and not st.get("cancelled"):
+            st["kind"] = agents.LOGGED_OUT
+            self.setupChanged.emit()
+            self.runSetup()             # installed: go straight on to sign in
+            return
+        st["kind"] = state
+        if not st.get("cancelled"):
+            st["error"] = st.get("log") or ("exit code %s" % code)
+        self.setupChanged.emit()
+
+    def _on_setup_out_final(self, proc):
+        if proc.bytesAvailable():
+            self._setup_proc = proc
+            self._on_setup_out()
+            self._setup_proc = None
+
+    @Slot()
+    def cancelSetup(self):
+        if self._setup_proc is not None:
+            if self._setup:
+                self._setup["cancelled"] = True
+            self._setup_proc.kill()
+            return
+        self._setup = None
+        self._pending = None
+        self.setupChanged.emit()
+
+    def _stop_after_auth(self):
+        if self.proc is not None:
+            self._abandon_run()
+            self._live = None
+            self._set_status("")
+            self._save_chat()
+
+    @Slot()
+    def openSetupPage(self):
+        if self._setup and self._setup.get("url"):
+            self.openUrl(self._setup["url"])
 
     @Slot(str)
     def setAgent(self, aid):
@@ -506,6 +718,11 @@ class ChatBackend(QObject):
         return REPO_URL
 
     repoUrl = Property(str, _get_repo_url, constant=True)
+
+    def _get_author_url(self):
+        return AUTHOR_URL
+
+    authorUrl = Property(str, _get_author_url, constant=True)
 
     def _load_index(self):
         """Read the small index file; rebuild it from chat files only when it's missing or stale."""
@@ -622,6 +839,10 @@ class ChatBackend(QObject):
         self._clear_images()
         self.cleared.emit()
         self._set_status("")
+        if self._setup and not self._setup.get("busy"):
+            self._setup = None
+            self.setupChanged.emit()
+        self._pending = None
         if old:
             self._chat_model.refresh(old)
         if had_agent and had_agent != self._agent_setting:
@@ -865,6 +1086,15 @@ class ChatBackend(QObject):
         self._last_prompt = prompt
         self._last_images = images
         self._save_chat()
+        state = self._states.get(self._agent_id)
+        if state != agents.READY:
+            state = self._agent.status()                # ~0.2 s
+            self._states[self._agent_id] = state
+        if state != agents.READY:
+            self._pending = (prompt, images, self._agent_id)
+            self._show_setup(self._agent_id, state)
+            self.modelChanged.emit()
+            return
         self._run(prompt, images)
 
     @Slot()
@@ -876,10 +1106,12 @@ class ChatBackend(QObject):
         self.graphChanged.emit()
         agent = self._agent
         self._run_agent, self._run_model = agent, self._model
+        self._session_before_run = self.session_id
         exe = agent.find()
         if not exe:
-            self._emit("error", self.t("cant_start") if agent.id == "claude" else self.t("codex_missing"))
-            self._save_chat()
+            self._states[agent.id] = agents.MISSING
+            self._pending = (prompt, list(images), agent.id)
+            self._show_setup(agent.id, agents.MISSING)
             return
         args, stdin_text = agent.build(prompt, self._run_model, self.session_id,
                                        [p for p in images if os.path.isfile(p)])
@@ -998,10 +1230,25 @@ class ChatBackend(QObject):
                 self._set_status(self.t("thinking"), "thinking")
         elif t == "error":
             self._error(e["text"])
+        elif t == "auth":
+            agent = self._run_agent
+            self._last_error = "auth"                  # no raw stderr dump at exit
+            self.session_id = getattr(self, "_session_before_run", self.session_id)   # the failed run's session is empty
+            self._states[agent.id] = agents.LOGGED_OUT
+            self._pending = (self._last_prompt, list(getattr(self, "_last_images", [])), agent.id)
+            self._show_setup(agent.id, agents.LOGGED_OUT)
+            self.modelChanged.emit()
+            QtCore.QTimer.singleShot(0, self._stop_after_auth)   # no point letting it retry for 30 s
+        elif t == "retrying":
+            self._set_status(self.t("reconnecting"), "thinking")
         elif t == "done":
             if e.get("error"):
                 self._error(e["error"])
             agent = self._run_agent
+            if agent.id == "codex":
+                self.modelChanged.emit()               # Codex's model list may have just been fetched
+            if self._setup:
+                return
             if agent.id == "codex" and self.session_id and not self._run_model:
                 self._run_model = agent.model_of_session(self.session_id) or ""
             secs = int(round(time.time() - self._run_started)) if self._run_started else 0

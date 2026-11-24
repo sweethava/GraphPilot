@@ -2,7 +2,10 @@
 
 ## Unreleased
 
-- Settings: version, author and a link to the GitHub repository.
+- Settings: version, author and links to the GitHub repository and author profile.
+- Install and sign in from the panel: if Claude Code / Codex is missing or not signed in, a card offers **Install** (official installer) or **Sign in** (opens the browser), then sends your message.
+- Sign-in state is checked before sending, so no more walls of errors: Codex's repeated "401 Unauthorized" retries and Claude's doubled "Not logged in" message are gone.
+- Settings shows "not installed" / "not signed in" with an Install / Sign in action.
 
 ## 1.1.1 — 2026-11-24
 

@@ -137,7 +137,7 @@ Rectangle {
     // ============================================================ messages
     ListView {
         id: list
-        anchors { top: header.bottom; left: parent.left; right: parent.right; bottom: composer.top; bottomMargin: 8 }
+        anchors { top: header.bottom; left: parent.left; right: parent.right; bottom: setupCard.visible ? setupCard.top : composer.top; bottomMargin: 8 }
         clip: true
         model: messages
         spacing: 0
@@ -246,6 +246,86 @@ Rectangle {
             text: tx.subtitle
             color: theme.faint
             font.family: theme.font; font.pixelSize: 13
+        }
+    }
+
+    // ============================================================ setup card: install / sign in
+    Rectangle {
+        id: setupCard
+        property var s: backend.setup
+        visible: !!(s && s.title)
+        anchors { left: parent.left; right: parent.right; bottom: composer.top; leftMargin: 12; rightMargin: 12; bottomMargin: 8 }
+        height: visible ? setupCol.height + 28 : 0
+        radius: 12
+        color: "#26262a"
+        border.color: theme.menuLine
+
+        Column {
+            id: setupCol
+            x: 14; y: 14
+            width: parent.width - 28
+            spacing: 8
+
+            Row {
+                width: parent.width
+                spacing: 8
+                Row {
+                    id: setupDots
+                    visible: !!setupCard.s.busy
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 4
+                    Repeater {
+                        model: 3
+                        Rectangle {
+                            width: 5; height: 5; radius: 2.5; color: theme.dim
+                            SequentialAnimation on opacity {
+                                running: setupDots.visible; loops: Animation.Infinite
+                                PauseAnimation { duration: index * 150 }
+                                NumberAnimation { to: 0.2; duration: 360 }
+                                NumberAnimation { to: 1.0; duration: 360 }
+                                PauseAnimation { duration: (2 - index) * 150 }
+                            }
+                        }
+                    }
+                }
+                Text {
+                    width: parent.width - (setupDots.visible ? setupDots.width + 8 : 0)
+                    text: setupCard.s.title || ""
+                    color: theme.text; wrapMode: Text.Wrap
+                    font.family: theme.font; font.pixelSize: 14; font.weight: Font.Medium
+                }
+            }
+            Text {
+                width: parent.width
+                visible: text !== ""
+                text: setupCard.s.text || ""
+                color: theme.dim; wrapMode: Text.Wrap
+                maximumLineCount: 5; elide: Text.ElideRight
+                font.family: theme.font; font.pixelSize: 12
+            }
+            Row {
+                spacing: 8
+                Rectangle {
+                    visible: !!setupCard.s.button
+                    width: primT.implicitWidth + 28; height: 30; radius: 8
+                    color: primMa.containsMouse ? "#ffffff" : "#ececee"
+                    Text { id: primT; anchors.centerIn: parent; text: setupCard.s.button || ""; color: "#1e1e20"; font.family: theme.font; font.pixelSize: 12; font.weight: Font.Medium }
+                    MouseArea { id: primMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: backend.runSetup() }
+                }
+                Rectangle {
+                    visible: !!setupCard.s.url
+                    width: pageT.implicitWidth + 24; height: 30; radius: 8
+                    color: pageMa.containsMouse ? theme.hover : theme.surface
+                    Text { id: pageT; anchors.centerIn: parent; text: (setupCard.s.openPage || "") + " ↗"; color: theme.text; font.family: theme.font; font.pixelSize: 12 }
+                    MouseArea { id: pageMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: backend.openSetupPage() }
+                }
+                Rectangle {
+                    width: canT.implicitWidth + 24; height: 30; radius: 8
+                    color: canMa.containsMouse ? theme.hover : "transparent"
+                    Text { id: canT; anchors.centerIn: parent; text: setupCard.s.cancel || ""; color: theme.dim; font.family: theme.font; font.pixelSize: 12 }
+                    MouseArea { id: canMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: backend.cancelSetup() }
+                }
+            }
         }
     }
 
@@ -782,17 +862,31 @@ Rectangle {
                         }
                     }
                 }
-                Text {
-                    width: parent.width
+                Row {
+                    id: agentHint
                     property var cur: {
                         var l = backend.agentList
                         for (var i = 0; i < l.length; i++) if (l[i].id === backend.agentSetting) return l[i]
                         return null
                     }
-                    visible: text !== ""
-                    text: cur && cur.hint ? cur.label + ": " + cur.hint : ""
-                    color: "#e0a060"; font.family: theme.font; font.pixelSize: 11
-                    wrapMode: Text.Wrap
+                    visible: !!(cur && cur.hint)
+                    spacing: 6
+                    Text {
+                        text: agentHint.cur ? agentHint.cur.label + ": " + agentHint.cur.hint : ""
+                        color: "#e0a060"; font.family: theme.font; font.pixelSize: 11
+                    }
+                    Text {
+                        text: agentHint.cur && agentHint.cur.action ? agentHint.cur.action + " →" : ""
+                        color: hintMa.containsMouse ? theme.text : "#f0b878"
+                        font.family: theme.font; font.pixelSize: 11; font.weight: Font.Medium
+                        font.underline: hintMa.containsMouse
+                        MouseArea {
+                            id: hintMa
+                            anchors.fill: parent; anchors.margins: -4
+                            hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                            onClicked: { settings.open = false; backend.startSetup(agentHint.cur.id) }
+                        }
+                    }
                 }
             }
 
@@ -860,9 +954,21 @@ Rectangle {
                 anchors.horizontalCenter: parent.horizontalCenter
                 spacing: 4
                 Text {
-                    text: "GraphPilot " + backend.version + " · by SweetHava"
+                    text: "GraphPilot " + backend.version + " · by"
                     color: theme.dim; opacity: 0.8
                     font.family: theme.font; font.pixelSize: 11
+                }
+                Text {
+                    text: "SweetHava"
+                    color: authorMa.containsMouse ? theme.text : theme.dim
+                    font.family: theme.font; font.pixelSize: 11
+                    font.underline: authorMa.containsMouse
+                    MouseArea {
+                        id: authorMa
+                        anchors.fill: parent; anchors.margins: -4
+                        hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                        onClicked: backend.openUrl(backend.authorUrl)
+                    }
                 }
                 Text {
                     text: "·"

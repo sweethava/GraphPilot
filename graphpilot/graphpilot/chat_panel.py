@@ -260,6 +260,9 @@ class BasicChat(QtWidgets.QWidget):
             self.status.setText("Tool: " + e["name"])
         elif t == "error":
             self._md += "\n\n> ⚠ %s\n\n" % e["text"]
+        elif t == "auth":
+            cmd = "claude auth login" if self.agent.id == "claude" else "codex login"
+            self._md += "\n\n> ⚠ %s: `%s`\n\n" % (self.tr.get("agent_login", "not signed in"), cmd)
         elif t == "done":
             if e.get("error"):
                 self._md += "\n\n> ⚠ %s\n\n" % e["error"]

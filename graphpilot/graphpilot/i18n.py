@@ -338,6 +338,76 @@ _AGENT = {
 for _k, (_a, _m, _l, _c) in _AGENT.items():
     S[_k].update({"assistant": _a, "agent_missing": _m, "agent_login": _l, "codex_missing": _c})
 
+# ---- setup: install / sign in (%s = Claude / ChatGPT / Codex)
+_SETUP_KEYS = ("agent_login", "setup_missing_t", "setup_missing_b", "setup_login_t", "setup_login_b",
+               "setup_node_t", "setup_node_b", "btn_install", "btn_signin", "btn_get_node", "btn_open_page",
+               "btn_cancel", "btn_later", "installing", "signing_in", "setup_failed", "setup_done", "reconnecting")
+_SETUP = {
+    "en": ("not signed in", "%s isn't installed",
+           "GraphPilot works through %s. Install it with the official installer — one click.",
+           "Sign in to %s", "Use your %s account. A browser window will open.",
+           "ChatGPT needs Node.js", "Codex installs through npm. Install Node.js (LTS), then press Install again.",
+           "Install", "Sign in", "Get Node.js", "Open sign-in page", "Cancel", "Not now",
+           "Installing %s…", "Finish signing in in your browser…", "That didn't work: %s", "%s is ready", "Reconnecting…"),
+    "ru": ("вход не выполнен", "%s не установлен",
+           "GraphPilot работает через %s. Установи его официальным установщиком — в один клик.",
+           "Войди в %s", "Через свой аккаунт %s. Откроется окно браузера.",
+           "Для ChatGPT нужен Node.js", "Codex ставится через npm. Установи Node.js (LTS) и снова нажми «Установить».",
+           "Установить", "Войти", "Скачать Node.js", "Открыть страницу входа", "Отмена", "Не сейчас",
+           "Устанавливаю %s…", "Заверши вход в браузере…", "Не получилось: %s", "%s готов", "Переподключаюсь…"),
+    "uk": ("вхід не виконано", "%s не встановлено",
+           "GraphPilot працює через %s. Встанови його офіційним інсталятором — в один клік.",
+           "Увійди в %s", "Через свій акаунт %s. Відкриється вікно браузера.",
+           "Для ChatGPT потрібен Node.js", "Codex встановлюється через npm. Встанови Node.js (LTS) і знову натисни «Встановити».",
+           "Встановити", "Увійти", "Завантажити Node.js", "Відкрити сторінку входу", "Скасувати", "Не зараз",
+           "Встановлюю %s…", "Заверши вхід у браузері…", "Не вдалося: %s", "%s готовий", "Перепідключаюся…"),
+    "de": ("nicht angemeldet", "%s ist nicht installiert",
+           "GraphPilot arbeitet über %s. Installiere es mit einem Klick über den offiziellen Installer.",
+           "Bei %s anmelden", "Mit deinem %s-Konto. Ein Browserfenster öffnet sich.",
+           "ChatGPT braucht Node.js", "Codex wird über npm installiert. Installiere Node.js (LTS) und klicke erneut auf Installieren.",
+           "Installieren", "Anmelden", "Node.js holen", "Anmeldeseite öffnen", "Abbrechen", "Nicht jetzt",
+           "Installiere %s…", "Schließe die Anmeldung im Browser ab…", "Hat nicht geklappt: %s", "%s ist bereit", "Verbinde neu…"),
+    "es": ("sin iniciar sesión", "%s no está instalado",
+           "GraphPilot funciona a través de %s. Instálalo con el instalador oficial, en un clic.",
+           "Inicia sesión en %s", "Con tu cuenta de %s. Se abrirá una ventana del navegador.",
+           "ChatGPT necesita Node.js", "Codex se instala con npm. Instala Node.js (LTS) y vuelve a pulsar Instalar.",
+           "Instalar", "Iniciar sesión", "Descargar Node.js", "Abrir página de acceso", "Cancelar", "Ahora no",
+           "Instalando %s…", "Termina de iniciar sesión en el navegador…", "No funcionó: %s", "%s está listo", "Reconectando…"),
+    "fr": ("non connecté", "%s n'est pas installé",
+           "GraphPilot fonctionne via %s. Installe-le avec l'installateur officiel, en un clic.",
+           "Se connecter à %s", "Avec ton compte %s. Une fenêtre du navigateur va s'ouvrir.",
+           "ChatGPT a besoin de Node.js", "Codex s'installe via npm. Installe Node.js (LTS), puis clique à nouveau sur Installer.",
+           "Installer", "Se connecter", "Obtenir Node.js", "Ouvrir la page de connexion", "Annuler", "Plus tard",
+           "Installation de %s…", "Termine la connexion dans le navigateur…", "Échec : %s", "%s est prêt", "Reconnexion…"),
+    "pt": ("sem sessão iniciada", "%s não está instalado",
+           "O GraphPilot funciona através do %s. Instale-o com o instalador oficial, em um clique.",
+           "Entrar no %s", "Com sua conta %s. Uma janela do navegador será aberta.",
+           "O ChatGPT precisa do Node.js", "O Codex é instalado via npm. Instale o Node.js (LTS) e clique em Instalar novamente.",
+           "Instalar", "Entrar", "Baixar Node.js", "Abrir página de login", "Cancelar", "Agora não",
+           "Instalando %s…", "Conclua o login no navegador…", "Não funcionou: %s", "%s está pronto", "Reconectando…"),
+    "zh": ("未登录", "未安装 %s",
+           "GraphPilot 通过 %s 工作。用官方安装程序一键安装。",
+           "登录 %s", "使用你的 %s 账户。将打开浏览器窗口。",
+           "ChatGPT 需要 Node.js", "Codex 通过 npm 安装。请先安装 Node.js (LTS)，再点“安装”。",
+           "安装", "登录", "获取 Node.js", "打开登录页面", "取消", "以后再说",
+           "正在安装 %s…", "请在浏览器中完成登录…", "未成功：%s", "%s 已就绪", "正在重新连接…"),
+    "ja": ("未サインイン", "%s がインストールされていません",
+           "GraphPilot は %s を通じて動作します。公式インストーラーでワンクリックでインストールできます。",
+           "%s にサインイン", "%s のアカウントを使います。ブラウザが開きます。",
+           "ChatGPT には Node.js が必要です", "Codex は npm でインストールします。Node.js (LTS) を入れてから、もう一度「インストール」を押してください。",
+           "インストール", "サインイン", "Node.js を入手", "サインインページを開く", "キャンセル", "後で",
+           "%s をインストール中…", "ブラウザでサインインを完了してください…", "うまくいきませんでした: %s", "%s の準備ができました", "再接続中…"),
+    "ko": ("로그인 안 됨", "%s이(가) 설치되지 않았습니다",
+           "GraphPilot은 %s을(를) 통해 작동합니다. 공식 설치 프로그램으로 한 번에 설치하세요.",
+           "%s에 로그인", "%s 계정을 사용합니다. 브라우저 창이 열립니다.",
+           "ChatGPT에는 Node.js가 필요합니다", "Codex는 npm으로 설치됩니다. Node.js(LTS)를 설치한 뒤 다시 설치를 누르세요.",
+           "설치", "로그인", "Node.js 받기", "로그인 페이지 열기", "취소", "나중에",
+           "%s 설치 중…", "브라우저에서 로그인을 완료하세요…", "실패했습니다: %s", "%s 준비 완료", "다시 연결 중…"),
+}
+for _k, _vals in _SETUP.items():
+    assert len(_vals) == len(_SETUP_KEYS), _k
+    S[_k].update(dict(zip(_SETUP_KEYS, _vals)))
+
 def system_lang():
     code = QLocale.system().name().split("_")[0].lower()
     return code if code in S else "en"

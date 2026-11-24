@@ -12,19 +12,27 @@ that the chat backend understands:
     {"t": "thinking"}                            internal step, nothing to show
     {"t": "result", "id", "images": [b64png]}    tool finished; images it returned
     {"t": "error", "text": str}                  an error/warning to show (the turn may go on)
+    {"t": "auth"}                                the agent is not signed in
+    {"t": "retrying", "text": str}               connection trouble, the agent retries by itself
     {"t": "done", "error": str|None}             turn finished
+
+Besides running, an adapter knows how to check its state (missing / logged_out / ready),
+how to sign in (a command that opens the browser) and how to install the CLI.
 """
 import glob
 import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 
 from . import chat_panel
 
 IS_WIN = sys.platform.startswith("win")
 MCP_NAME = "substance-designer"
+
+MISSING, LOGGED_OUT, READY = "missing", "logged_out", "ready"
 
 
 def _strip_prefix(name):
@@ -34,18 +42,60 @@ def _strip_prefix(name):
     return name
 
 
+def _env():
+    env = dict(os.environ)
+    for k in ("PYTHONHOME", "PYTHONPATH"):
+        env.pop(k, None)
+    return env
+
+
+def _quick(args, timeout=8, env=None):
+    """Run a short CLI command without a console window; -> (exit code, stdout+stderr) or (None, "")."""
+    try:
+        p = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           timeout=timeout, env=env or _env(), stdin=subprocess.DEVNULL,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        return p.returncode, (p.stdout or "") + (p.stderr or "")
+    except Exception:
+        return None, ""
+
+
 # ======================================================================= Claude Code
 class ClaudeAgent:
     id = "claude"
     label = "Claude"
     HIDDEN_TOOLS = {"ToolSearch"}
     MODELS = ["fable", "opus", "sonnet", "haiku"]      # aliases -> always the newest of each family
+    HOME_URL = "https://claude.com/claude-code"
+
+    def __init__(self):
+        self._err_text = None
 
     def find(self):
         return chat_panel._find_claude()
 
+    def status(self):
+        exe = self.find()
+        if not exe:
+            return MISSING
+        code, out = _quick([exe, "auth", "status"])
+        m = re.search(r'"loggedIn"\s*:\s*(true|false)', out)
+        if m:
+            return READY if m.group(1) == "true" else LOGGED_OUT
+        return READY        # unknown (older CLI?): don't block, a failed run will tell
+
     def ready(self):
         return bool(self.find())
+
+    def login_args(self):
+        return ["auth", "login"]
+
+    def install_command(self):
+        """-> (program, args) of the official installer, or None."""
+        if IS_WIN:
+            return ("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+                                       "irm https://claude.ai/install.ps1 | iex"])
+        return ("/bin/bash", ["-c", "curl -fsSL https://claude.ai/install.sh | bash"])
 
     def models(self, t, resolved):
         return [{"id": m, "label": resolved.get(m) or m.capitalize(), "hint": t("hint_" + m)} for m in self.MODELS]
@@ -55,6 +105,7 @@ class ClaudeAgent:
 
     def build(self, prompt, model, session_id, images):
         """-> (args, stdin_text). Claude opens attached images itself with its Read tool."""
+        self._err_text = None
         if images:
             prompt = ("[The user attached images (screenshots). First open each one with the Read tool "
                       "and take them into account: %s]\n" % "; ".join(images)) + prompt
@@ -79,6 +130,16 @@ class ClaudeAgent:
             if e.get("type") == "content_block_delta" and e.get("delta", {}).get("type") == "text_delta":
                 out.append({"t": "delta", "text": e["delta"].get("text", "")})
         elif t == "assistant":
+            if ev.get("error"):
+                # a synthetic message that only carries an error: show it once, as an error
+                text = " ".join(b.get("text", "") for b in ev.get("message", {}).get("content", [])
+                                if b.get("type") == "text").strip()
+                self._err_text = text
+                if ev["error"] == "authentication_failed":
+                    out.append({"t": "auth"})
+                elif text:
+                    out.append({"t": "error", "text": text})
+                return out
             for block in ev.get("message", {}).get("content", []):
                 bt = block.get("type")
                 if bt == "text" and block.get("text"):
@@ -101,7 +162,11 @@ class ClaudeAgent:
                             imgs.append(c["source"]["data"])
                     out.append({"t": "result", "id": block.get("tool_use_id"), "images": imgs})
         elif t == "result":
-            err = str(ev.get("result") or ev.get("subtype")) if ev.get("is_error") else None
+            err = None
+            if ev.get("is_error"):
+                err = str(ev.get("result") or ev.get("subtype"))
+                if self._err_text is not None and err.strip() == self._err_text:
+                    err = None          # already shown
             out.append({"t": "done", "error": err})
         return out
 
@@ -116,6 +181,11 @@ class ClaudeAgent:
 class CodexAgent:
     id = "codex"
     label = "ChatGPT"
+    HOME_URL = "https://github.com/openai/codex"
+    NODE_URL = "https://nodejs.org/"
+
+    def __init__(self):
+        self._auth_failed = False
 
     @staticmethod
     def home():
@@ -152,8 +222,37 @@ class CodexAgent:
     def logged_in(self):
         return os.path.isfile(os.path.join(self.home(), "auth.json"))
 
+    def status(self):
+        exe = self.find()
+        if not exe:
+            return MISSING
+        code, out = _quick([exe, "login", "status"])
+        if code is None:
+            return READY if self.logged_in() else LOGGED_OUT
+        return READY if "logged in" in out.lower() and "not logged in" not in out.lower() else LOGGED_OUT
+
     def ready(self):
         return bool(self.find()) and self.logged_in()
+
+    def login_args(self):
+        return ["login"]
+
+    def install_command(self):
+        """npm install -g @openai/codex, run through node itself (no cmd.exe). None if Node.js is missing."""
+        node = shutil.which("node")
+        if not node and not IS_WIN:
+            for c in ("/opt/homebrew/bin/node", "/usr/local/bin/node"):
+                if os.path.isfile(c):
+                    node = c
+                    break
+        if not node:
+            return None
+        base = os.path.dirname(os.path.realpath(node))
+        for cli in (os.path.join(base, "node_modules", "npm", "bin", "npm-cli.js"),
+                    os.path.join(base, "..", "lib", "node_modules", "npm", "bin", "npm-cli.js")):
+            if os.path.isfile(cli):
+                return (node, [os.path.normpath(cli), "install", "-g", "@openai/codex"])
+        return None
 
     def _cache(self):
         try:
@@ -183,6 +282,7 @@ class CodexAgent:
 
     def build(self, prompt, model, session_id, images):
         """-> (args, stdin_text). The prompt goes through stdin ('-'), images via -i."""
+        self._auth_failed = False
         args = ["exec"]
         if session_id:
             args += ["resume", session_id]
@@ -209,6 +309,22 @@ class CodexAgent:
             env.insert("CODEX_MANAGED_PACKAGE_ROOT", m.group(1))
             env.insert("CODEX_MANAGED_BY_NPM", "1")
         return env
+
+    @staticmethod
+    def _is_auth(msg):
+        m = (msg or "").lower()
+        return "401" in m or "unauthorized" in m or "not logged in" in m
+
+    def _error(self, msg):
+        """Codex reports both retries and final failures as errors: sort them out."""
+        if self._is_auth(msg):
+            if self._auth_failed:
+                return []
+            self._auth_failed = True
+            return [{"t": "auth"}]
+        if msg.lower().startswith("reconnecting"):
+            return [{"t": "retrying", "text": msg}]
+        return [{"t": "error", "text": msg}]
 
     def parse(self, ev):
         out = []
@@ -237,13 +353,18 @@ class CodexAgent:
                         if c.get("type") == "image" and c.get("data")]
                 out.append({"t": "result", "id": item.get("id"), "images": imgs})
             elif it == "error" and item.get("message"):
-                out.append({"t": "error", "text": item["message"]})     # non-fatal; the turn goes on
+                out += self._error(item["message"])
         elif t == "turn.completed":
             out.append({"t": "done", "error": None})
         elif t == "turn.failed":
-            out.append({"t": "done", "error": ((ev.get("error") or {}).get("message")) or "turn failed"})
+            msg = ((ev.get("error") or {}).get("message")) or "turn failed"
+            if self._is_auth(msg):
+                out += self._error(msg)
+                out.append({"t": "done", "error": None})
+            else:
+                out.append({"t": "done", "error": msg})
         elif t == "error" and ev.get("message"):
-            out.append({"t": "error", "text": ev["message"]})
+            out += self._error(ev["message"])
         return out
 
     def model_of_session(self, thread_id):
