@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.3 — 2026-11-25
 
 - Colour themes in Settings: Graphite (the old look), Designer (Designer's own green), Midnight and Ember. The logo on the start screen takes the theme's colours.
 
