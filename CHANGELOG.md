@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.0 — 2026-11-24
 
 - Settings: version, author and links to the GitHub repository and author profile.
 - Install and sign in from the panel: if Claude Code / Codex is missing or not signed in, a card offers **Install** (official installer) or **Sign in** (opens the browser), then sends your message.
