@@ -1,11 +1,12 @@
 # Changelog
 
-## Unreleased
+## 1.1.1 — 2026-11-24
 
 - Security: the local Designer bridge now requires a per-session random token (stored in `bridge.json` in the GraphPilot data folder). Other users and programs without access to your profile can no longer run code in Designer.
 - Library nodes: the library package opened to place a node is closed again, so packages no longer pile up in the Explorer.
 - README: Windows is the supported platform; macOS is untested.
 - New GraphPilot logo (panel welcome screen and README).
+- Fallback panel (used only if the main panel fails to load) is now in English and works with both assistants.
 
 ## 1.1.0 — 2026-11-24
 

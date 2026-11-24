@@ -19,7 +19,7 @@ Works with **[Claude Code](https://claude.com/claude-code)** or **[OpenAI Codex]
     <td align="center"><img src="docs/images/models.png" width="260" alt="Model picker"><br><sub>Always the newest models</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/images/settings.png" width="260" alt="Settings"><br><sub>Fonts: Onest, Inter, system</sub></td>
+    <td align="center"><img src="docs/images/settings.png" width="260" alt="Settings"><br><sub>Claude or ChatGPT, fonts</sub></td>
     <td align="center"><img src="docs/images/languages.png" width="260" alt="Languages"><br><sub>10 interface languages</sub></td>
     <td></td>
   </tr>
