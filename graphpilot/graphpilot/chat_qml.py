@@ -21,6 +21,7 @@ from . import agents
 from . import i18n
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+ATTACH_KEY = "Ctrl+Shift+A"     # Designer-wide: attach the selected nodes (free in Designer 16)
 REPO_URL = "https://github.com/sweethava/GraphPilot"
 AUTHOR_URL = "https://github.com/sweethava"
 
@@ -235,6 +236,7 @@ class ChatBackend(QObject):
     statusChanged = Signal()
     attachmentChanged = Signal()
     cleared = Signal()
+    focusInput = Signal()               # put the cursor in the message box
 
     def __init__(self, ui_mgr=None, parent=None):
         super().__init__(parent)
@@ -1316,4 +1318,35 @@ def create_dock(ui_mgr, dock_id="graphpilot", title="GraphPilot"):
     lay.setContentsMargins(0, 0, 0, 0)
     lay.addWidget(view)
     _keep.append((dock, backend, view))
+    _install_attach_shortcut(ui_mgr, dock, backend, view)
     return dock, backend, view
+
+
+def _install_attach_shortcut(ui_mgr, dock, backend, view):
+    """Ctrl+Shift+A anywhere in Designer: attach the selected nodes, show the panel, focus the input."""
+    try:
+        mw = ui_mgr.getMainWindow()
+    except Exception:
+        return
+    if mw is None:
+        return
+    for old in mw.findChildren(QtGui.QShortcut, "graphpilot_attach"):   # hot reload: one shortcut only
+        old.setEnabled(False)
+        old.deleteLater()
+    sc = QtGui.QShortcut(QtGui.QKeySequence(ATTACH_KEY), mw)
+    sc.setObjectName("graphpilot_attach")
+    sc.setContext(Qt.ApplicationShortcut)
+
+    def fire():
+        backend.attachSelection()
+        d = dock
+        while d is not None and not isinstance(d, QtWidgets.QDockWidget):
+            d = d.parentWidget()
+        if d is not None:
+            d.show()
+            d.raise_()
+        view.activateWindow()
+        view.setFocus()
+        backend.focusInput.emit()
+
+    sc.activated.connect(fire)

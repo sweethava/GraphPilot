@@ -62,6 +62,7 @@ To update, replace the `graphpilot` folder and restart Designer. Your chats and 
 
 - Open a graph first, then ask: *"Make a mossy stone wall"*, *"Why is my normal map so flat?"*, *"Add a dirt pass driven by the AO output"*.
 - **Enter** sends, **Shift+Enter** for a new line, **Ctrl+V** pastes a screenshot.
+- **Ctrl+Shift+A** anywhere in Designer attaches the selected nodes to your message. Click the nodes chip to jump back to them in the graph.
 - The button in the top-right corner shows or hides the tool steps Claude takes.
 - Save your package before big requests, so you can always go back.
 

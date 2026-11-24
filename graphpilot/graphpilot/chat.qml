@@ -46,6 +46,7 @@ Rectangle {
             list.stickToBottom()
         }
         function onCleared() { messages.clear(); root.lastAssistant = -1; list.atBottom = true }
+        function onFocusInput() { root.closePopups(); input.forceActiveFocus() }
     }
 
     function submit() {
@@ -533,7 +534,7 @@ Rectangle {
         items: [ { id: "shot", icon: "camera", label: tx.shot_designer },
                  { id: "file", icon: "image", label: tx.image_disk },
                  { id: "paste", icon: "paste", label: tx.paste_clip, hint: Qt.platform.os === "osx" ? "⌘V" : "Ctrl+V" },
-                 { id: "nodes", icon: "node", label: tx.selected_nodes } ]
+                 { id: "nodes", icon: "node", label: tx.selected_nodes, hint: Qt.platform.os === "osx" ? "⌘⇧A" : "Ctrl+Shift+A" } ]
         footnote: tx.drop_hint
         onPicked: function(id) {
             if (id === "shot") backend.grabDesigner()
