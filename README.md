@@ -50,7 +50,7 @@ Nothing else: the MCP server that connects the assistant to Designer ships with 
 
 ## Install
 
-1. Download `GraphPilot-<version>.zip` from [Releases](../../releases) or [Gumroad](https://ilyasovzhan.gumroad.com/l/graphpilot) (free, pay what you want).
+1. Download `GraphPilot-<version>.zip` from [Releases](../../releases) or [Gumroad](https://sweethava.gumroad.com/l/graphpilot) (free, pay what you want).
 2. Unzip it and copy the **`graphpilot`** folder into Designer's user plugins folder:
    - Windows: `Documents\Adobe\Adobe Substance 3D Designer\python\sduserplugins\`
    - macOS (untested): `~/Documents/Adobe/Adobe Substance 3D Designer/python/sduserplugins/`
@@ -106,7 +106,7 @@ graphpilot/                 ← the plugin folder that goes into sduserplugins
 
 ## Support
 
-Bugs and ideas: [Issues](../../issues). If GraphPilot saves you time, you can support it on [Gumroad](https://ilyasovzhan.gumroad.com/l/graphpilot) — pay what you want.
+Bugs and ideas: [Issues](../../issues). If GraphPilot saves you time, you can support it on [Gumroad](https://sweethava.gumroad.com/l/graphpilot) — pay what you want.
 
 ## License
 
