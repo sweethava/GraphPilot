@@ -104,6 +104,12 @@ graphpilot/                 ← the plugin folder that goes into sduserplugins
     i18n.py                 UI strings
 ```
 
+How the pieces fit together and where to add features: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Credits
+
+The panel's look was inspired by the [Lumen AI chatbot concept](https://www.pinterest.com/pin/1096696946794658982/) by Good Things Come in Components.
+
 ## Support
 
 Bugs and ideas: [Issues](../../issues). If GraphPilot saves you time, you can support it on [Gumroad](https://sweethava.gumroad.com/l/graphpilot) — pay what you want.
