@@ -408,6 +408,25 @@ for _k, _vals in _SETUP.items():
     assert len(_vals) == len(_SETUP_KEYS), _k
     S[_k].update(dict(zip(_SETUP_KEYS, _vals)))
 
+# ---- node chip: show the attached nodes in the graph
+_FOCUS_KEYS = ("show_nodes", "nodes_gone")
+_FOCUS = {
+    "en": ("Show in graph", "these nodes are no longer in the graph"),
+    "ru": ("Показать в графе", "этих нод больше нет в графе"),
+    "uk": ("Показати в графі", "цих нод більше немає в графі"),
+    "de": ("Im Graphen zeigen", "diese Nodes sind nicht mehr im Graphen"),
+    "es": ("Mostrar en el grafo", "estos nodos ya no están en el grafo"),
+    "fr": ("Afficher dans le graphe", "ces nœuds ne sont plus dans le graphe"),
+    "pt": ("Mostrar no grafo", "estes nós não estão mais no grafo"),
+    "zh": ("在图中显示", "这些节点已不在图中"),
+    "ja": ("グラフで表示", "これらのノードはグラフにもうありません"),
+    "ko": ("그래프에서 보기", "이 노드들은 더 이상 그래프에 없습니다"),
+}
+for _k, _vals in _FOCUS.items():
+    assert len(_vals) == len(_FOCUS_KEYS), _k
+    S[_k].update(dict(zip(_FOCUS_KEYS, _vals)))
+
+
 def system_lang():
     code = QLocale.system().name().split("_")[0].lower()
     return code if code in S else "en"

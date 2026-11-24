@@ -248,6 +248,7 @@ class ChatBackend(QObject):
         self._phase = ""           # "", thinking, tool, writing
         self._attach = ""
         self._attach_label = ""
+        self._attach_nodes = None   # (graph identifier, [node ids]) behind the node chip
         self._last_prompt = ""
         self._images = []          # local paths of attached screenshots
         self._quiet_results = set()  # tool_use ids whose image results are not shown
@@ -1044,13 +1045,32 @@ class ChatBackend(QObject):
         gname = g.getIdentifier() if g is not None else "?"
         self._attach = "[Selected nodes in graph %s: %s]\n" % (gname, "; ".join(items))
         self._attach_label = self.t("nodes_selected") % len(items) if len(items) > 1 else items[0].split(" (")[0]
+        self._attach_nodes = (g.getIdentifier() if g is not None else None, [n.getIdentifier() for n in nodes])
         self.attachmentChanged.emit()
 
     @Slot()
     def clearAttachment(self):
         self._attach = ""
         self._attach_label = ""
+        self._attach_nodes = None
         self.attachmentChanged.emit()
+
+    @Slot()
+    def focusAttachment(self, _retry=0):
+        """Node chip clicked: show those nodes in the graph view (open the graph, fit, select)."""
+        if not self._attach_nodes:
+            return
+        from . import helpers
+        gid, ids = self._attach_nodes
+        try:
+            r = helpers.focus_nodes(ids, gid)
+        except BaseException as e:   # graph closed / renamed
+            print("[GraphPilot] focus failed:", e)
+            r = {"found": 0}
+        if not r.get("found"):
+            self._set_status(self.t("nodes_gone"))
+        elif r.get("pending") and _retry < 5:   # graph is being opened: wait for its view
+            QtCore.QTimer.singleShot(250, lambda: self.focusAttachment(_retry + 1))
 
     @Slot(str)
     def copyText(self, text):

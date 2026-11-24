@@ -345,7 +345,7 @@ Rectangle {
             x: 12; y: 12
             width: parent.width - 24
             spacing: 6
-            visible: chip.visible || backend.images.length > 0
+            visible: backend.attachmentLabel !== "" || backend.images.length > 0   // not chip.visible: a child of a hidden item is never visible
 
             Rectangle {
                 id: chip
@@ -353,7 +353,16 @@ Rectangle {
                 height: 26
                 width: chipRow.width + 20
                 radius: 7
-                color: "#38383c"
+                color: chipMa.containsMouse && !xMa.containsMouse ? "#424247" : "#38383c"
+                Behavior on color { ColorAnimation { duration: 120 } }
+                MouseArea {
+                    id: chipMa
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: { tooltip.hide(); backend.focusAttachment() }
+                    onContainsMouseChanged: containsMouse ? tooltip.showFor(chip, tx.show_nodes) : tooltip.hide()
+                }
                 Row {
                     id: chipRow
                     anchors.centerIn: parent

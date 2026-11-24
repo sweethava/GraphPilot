@@ -436,3 +436,57 @@ def node_definitions(filter="", graph_id=None):
     f = (filter or "").lower()
     defs = graph(graph_id).getNodeDefinitions()
     return [d.getId() for d in defs if f in d.getId().lower()]
+
+
+# ------------------------------------------------------------------ view
+def focus_nodes(node_ids, graph_id=None, select=True, max_zoom=1.5):
+    """Show nodes in the graph view: open the graph if needed, fit them in view, select them.
+
+    -> {"found": n, "pending": True} when the graph had to be opened first (call again once its view exists).
+    """
+    from PySide6 import QtCore, QtWidgets
+    u = _app().getUIMgr()
+    g = graph(graph_id)
+    nodes = [n for n in (g.getNodeFromId(str(i)) for i in node_ids) if n is not None]
+    if not nodes:
+        return {"found": 0}
+    cur = _ui().getCurrentGraph()
+    if cur is None or cur.getIdentifier() != g.getIdentifier():
+        _open_in_editor(g)
+        return {"found": len(nodes), "pending": True}
+    vid = None
+    for i in range(u.getGraphViewIDCount()):
+        v = u.getGraphViewIDAt(i)
+        vg = u.getGraphFromGraphViewID(v)
+        if vg is not None and vg.getIdentifier() == g.getIdentifier():
+            vid = v
+            break
+    if vid is None:
+        return {"found": len(nodes), "pending": True}
+    w = _ui().getGraphView(vid)
+    gv = w if isinstance(w, QtWidgets.QGraphicsView) else (w.findChild(QtWidgets.QGraphicsView) if w else None)
+    if gv is None or gv.scene() is None:
+        u.focusGraphNode(vid, nodes[0])
+        return {"found": len(nodes)}
+    rect, boxes = QtCore.QRectF(), []
+    for n in nodes:
+        b = u.getGraphNodeBBox(vid, n)          # scene coords: x, y, z = width, w = height
+        r = QtCore.QRectF(b.x, b.y, b.z, b.w)
+        boxes.append(r)
+        rect = rect.united(r) if not rect.isNull() else r
+    rect.adjust(-80, -80, 80, 80)
+    gv.fitInView(rect, QtCore.Qt.KeepAspectRatio)
+    s = gv.transform().m11()
+    if s > max_zoom:                             # a single node shouldn't fill the whole view
+        gv.scale(max_zoom / s, max_zoom / s)
+    gv.centerOn(rect.center())
+    if select:
+        sc = gv.scene()
+        sc.clearSelection()
+        for r in boxes:
+            for it in sc.items(r.center()):      # topmost selectable node-sized item = the node
+                if it.flags() & QtWidgets.QGraphicsItem.ItemIsSelectable and \
+                        it.sceneBoundingRect().width() < r.width() + 60 and it.sceneBoundingRect().height() < r.height() + 80:
+                    it.setSelected(True)
+                    break
+    return {"found": len(nodes)}
