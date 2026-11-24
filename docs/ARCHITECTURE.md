@@ -209,7 +209,9 @@ Renders the AI asked to show (`show: true`) are saved there too; other tool resu
   - `palettes` + `theme` (colors, font). A palette is only `{tint, accent, accentHover, onAccent, ok}`: every
     grey role in `theme` is a neutral value passed through `root.tone()` (`Qt.tint` toward the palette's tint;
     text gets a third of it). Use `theme.<role>` for every colour; add new greys as roles, never as hex in place.
-    The theme list and labels are `THEMES` in `chat_qml.py`;
+    The theme list and labels are `THEMES` in `chat_qml.py`. The welcome logo is `icons/logo.png` (Graphite, the
+    approved design) or `icons/logo_<theme>.png`, recoloured from it by `tools/logo_variants.py` (run it inside
+    Designer, it needs PySide6) — a new theme needs a hue pair there;
   - `header`;
   - `list` (ListView of messages, with delegates `userMsg / botMsg / toolMsg / imageMsg / userImageMsg / errorMsg`);
   - welcome screen (logo + greeting);

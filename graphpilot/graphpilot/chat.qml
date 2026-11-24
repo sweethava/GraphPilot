@@ -267,7 +267,8 @@ Rectangle {
         width: list.width - 48
         Image {
             anchors.horizontalCenter: parent.horizontalCenter
-            source: Qt.resolvedUrl("icons/logo.png")
+            // logo.png is the approved Graphite glow; other themes use recoloured copies (tools/logo_variants.py)
+            source: Qt.resolvedUrl(backend.theme === "graphite" ? "icons/logo.png" : "icons/logo_" + backend.theme + ".png")
             width: 63; height: 45      // icons/logo.png is 3x this
             smooth: true; mipmap: true; cache: false
         }
