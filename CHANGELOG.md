@@ -6,6 +6,12 @@
 - Renders the assistant makes to check its own work are no longer dumped into the chat. It shows an image only for a final result or when you ask to see something.
 - Images in the chat now really have rounded corners.
 - Attached nodes in a sent message are shown as the same chip as in the message box (icon instead of the 📎 emoji). Click it to show those nodes in the graph.
+- Fix: dragging images into the panel did nothing (the dropped file paths were lost on the way to Python).
+- Thumbnails of attached images in the message box have rounded corners too.
+- Fix: a message with attached nodes could overlap the next message.
+- The Designer bridge accepts bursts of requests (several tool calls at once no longer get "connection refused").
+- Library nodes can be created by their short name (`perlin_noise` finds `noise_perlin_noise`), and failed node creation / connections now explain what is available instead of a bare API error.
+- Showing nodes in the graph no longer fails when the graph's tab was closed and reopened.
 
 ## 1.2.1 — 2026-11-24
 

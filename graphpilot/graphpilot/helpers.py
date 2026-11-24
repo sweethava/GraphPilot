@@ -242,8 +242,17 @@ def _library_resource(name, graph_name=None):
     path = name if os.path.isabs(name) else os.path.join(root, name if name.endswith(".sbs") else name + ".sbs")
     if not os.path.exists(path):
         base = os.path.splitext(os.path.basename(name))[0].lower()
-        similar = [n for n in list_library() if any(w in n.lower() for w in base.split("_") if len(w) > 2)][:30]
-        raise RuntimeError("library package %r not found. Similar: %s" % (name, similar))
+        names = list_library()
+        # library files carry a category prefix: "perlin_noise" is noise_perlin_noise.sbs
+        hits = [n for n in names if n.lower().endswith("_" + base)]
+        hits.sort(key=lambda n: (n.lower().startswith("3d_"), len(n)))
+        if hits:
+            path = os.path.join(root, hits[0] + ".sbs")
+        else:
+            words = [w for w in base.split("_") if len(w) > 2]
+            similar = sorted((n for n in names if any(w in n.lower() for w in words)),
+                             key=lambda n: (-sum(w in n.lower() for w in words), len(n)))[:20]
+            raise RuntimeError("library package %r not found. Closest: %s (see sd_list_library)" % (name, similar))
     pkg = _pm().getUserPackageFromFilePath(path) or _pm().loadUserPackage(path, True)
     if pkg is None:
         raise RuntimeError("could not load %s" % path)
@@ -296,7 +305,11 @@ def create_node(definition=None, library=None, library_graph=None, x=0, y=0,
     else:
         if "::" not in definition:
             definition = "sbs::compositing::" + definition
-        n = g.newNode(definition)
+        try:
+            n = g.newNode(definition)
+        except BaseException:
+            raise RuntimeError("unknown node definition %r (see sd_list_node_definitions; library nodes go "
+                               "through `library`)" % definition)
     n.setPosition(float2(float(x), float(y)))
     errs = _apply_params(n, params)
     out = node_info(n.getIdentifier(), graph_id)
@@ -316,7 +329,13 @@ def connect(from_node, to_node, to_input="input1", from_output=None, graph_id=No
     b = node(to_node, graph_id)
     if not from_output:
         from_output = a.getProperties(SDPropertyCategory.Output)[0].getId()
-    a.newPropertyConnectionFromId(from_output, b, to_input)
+    try:
+        a.newPropertyConnectionFromId(from_output, b, to_input)
+    except BaseException:
+        ins = [p.getId() for p in b.getProperties(SDPropertyCategory.Input) if p.isConnectable()]
+        outs = [p.getId() for p in a.getProperties(SDPropertyCategory.Output)]
+        raise RuntimeError("cannot connect %s.%s -> %s.%s. Outputs of %s: %s; connectable inputs of %s: %s"
+                           % (from_node, from_output, to_node, to_input, from_node, outs, to_node, ins))
     return {"from": from_node, "from_output": from_output, "to": to_node, "to_input": to_input}
 
 
@@ -463,9 +482,14 @@ def focus_nodes(node_ids, graph_id=None, select=True, max_zoom=1.5):
             break
     if vid is None:
         return {"found": len(nodes), "pending": True}
-    w = _ui().getGraphView(vid)
-    gv = w if isinstance(w, QtWidgets.QGraphicsView) else (w.findChild(QtWidgets.QGraphicsView) if w else None)
-    if gv is None or gv.scene() is None:
+    try:     # the view widget can already be gone (graph tab closed / reopened)
+        w = _ui().getGraphView(vid)
+        gv = w if isinstance(w, QtWidgets.QGraphicsView) else (w.findChild(QtWidgets.QGraphicsView) if w else None)
+        if gv is not None and gv.scene() is None:
+            gv = None
+    except RuntimeError:
+        gv = None
+    if gv is None:
         u.focusGraphNode(vid, nodes[0])
         return {"found": len(nodes)}
     rect, boxes = QtCore.QRectF(), []
@@ -484,9 +508,17 @@ def focus_nodes(node_ids, graph_id=None, select=True, max_zoom=1.5):
         sc = gv.scene()
         sc.clearSelection()
         for r in boxes:
-            for it in sc.items(r.center()):      # topmost selectable node-sized item = the node
-                if it.flags() & QtWidgets.QGraphicsItem.ItemIsSelectable and \
-                        it.sceneBoundingRect().width() < r.width() + 60 and it.sceneBoundingRect().height() < r.height() + 80:
-                    it.setSelected(True)
-                    break
+            # the node's item: selectable, and its rect closest to the node's box (frames/comments are bigger)
+            best, score = None, None
+            for it in sc.items(r.center()):
+                if not it.flags() & QtWidgets.QGraphicsItem.ItemIsSelectable:
+                    continue
+                b = it.sceneBoundingRect()
+                if b.width() > r.width() + 60 or b.height() > r.height() + 80:
+                    continue
+                d = abs(b.center().x() - r.center().x()) + abs(b.center().y() - r.center().y()) + abs(b.width() - r.width())
+                if score is None or d < score:
+                    best, score = it, d
+            if best is not None:
+                best.setSelected(True)
     return {"found": len(nodes)}

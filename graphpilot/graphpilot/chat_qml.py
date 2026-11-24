@@ -1041,7 +1041,8 @@ class ChatBackend(QObject):
 
     @Slot("QVariantList")
     def addFiles(self, urls):
-        self._add_files([QUrl(str(u)).toLocalFile() for u in urls])
+        # from QML these arrive as QUrl objects; str(QUrl) is its repr, not the URL
+        self._add_files([(u if isinstance(u, QUrl) else QUrl(str(u))).toLocalFile() for u in urls])
 
     @Slot()
     def pickImages(self):

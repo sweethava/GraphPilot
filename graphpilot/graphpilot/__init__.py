@@ -177,7 +177,7 @@ class _Server:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1) if hasattr(socket, "SO_EXCLUSIVEADDRUSE") else None
         s.bind((HOST, PORT))
-        s.listen(4)
+        s.listen(128)   # tool calls can arrive in bursts (parallel MCP calls)
         self.sock = s
         try:
             _write_bridge_file(self.token)

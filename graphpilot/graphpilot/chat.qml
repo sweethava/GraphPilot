@@ -1214,15 +1214,17 @@ Rectangle {
                 id: ub
                 anchors.right: parent.right
                 anchors.rightMargin: 14
-                width: Math.max(ut.visible ? ut.width : 0, uchip.visible ? uchip.width : 0) + 24
-                height: (uchip.visible ? uchip.height : 0) + (uchip.visible && ut.visible ? 8 : 0)
-                        + (ut.visible ? ut.height : 0) + 18
+                // sized from the data, not from .visible: children of a not-yet-shown row report visible=false
+                property bool hasChip: mChip !== ""
+                property bool hasText: mText !== ""
+                width: Math.max(hasText ? ut.width : 0, hasChip ? uchip.width : 0) + 24
+                height: (hasChip ? uchip.height : 0) + (hasChip && hasText ? 8 : 0) + (hasText ? ut.height : 0) + 18
                 radius: 8
                 color: theme.surface
                 // attached nodes: same chip as in the composer; click shows them in the graph
                 Rectangle {
                     id: uchip
-                    visible: mChip !== ""
+                    visible: ub.hasChip
                     x: 12; y: 9
                     height: 26
                     width: ucRow.width + 20
@@ -1251,9 +1253,9 @@ Rectangle {
                 }
                 TextEdit {
                     id: ut
-                    visible: mText !== ""
+                    visible: ub.hasText
                     x: 12
-                    y: uchip.visible ? uchip.y + uchip.height + 8 : 9
+                    y: ub.hasChip ? uchip.y + uchip.height + 8 : 9
                     property real maxW: root.width * 0.78 - 24
                     width: Math.min(measure.implicitWidth + 2, maxW)
                     text: mText
