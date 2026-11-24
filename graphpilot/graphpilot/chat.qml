@@ -723,7 +723,7 @@ Rectangle {
     Rectangle {
         id: settings
         property bool open: false
-        onOpenChanged: choice.visible = false
+        onOpenChanged: { choice.visible = false; if (open) backend.refreshAgents() }
         z: 71
         visible: opacity > 0
         opacity: open ? 1 : 0
@@ -755,6 +755,48 @@ Rectangle {
                 ActionIcon {
                     anchors { right: parent.right; verticalCenter: parent.verticalCenter }
                     iconName: "x"; onClicked: settings.open = false
+                }
+            }
+
+            // assistant: Claude Code / Codex (ChatGPT)
+            Column {
+                width: parent.width; spacing: 6
+                Text { text: tx.assistant; color: theme.dim; font.family: theme.font; font.pixelSize: 12 }
+                Rectangle {
+                    width: parent.width; height: 40; radius: 9
+                    color: "#1c1c1e"
+                    Row {
+                        x: 3; y: 3
+                        Repeater {
+                            model: backend.agentList
+                            Rectangle {
+                                width: (setCol.width - 6) / Math.max(1, backend.agentList.length); height: 34; radius: 7
+                                property bool sel: backend.agentSetting === modelData.id
+                                color: sel ? "#3a3a3f" : (aMa.containsMouse ? "#2a2a2d" : "transparent")
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: modelData.label
+                                    color: parent.sel ? theme.text : theme.dim
+                                    opacity: modelData.ready ? 1 : 0.6
+                                    font.family: theme.font; font.pixelSize: 14
+                                }
+                                MouseArea { id: aMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: backend.setAgent(modelData.id) }
+                            }
+                        }
+                    }
+                }
+                Text {
+                    width: parent.width
+                    property var cur: {
+                        var l = backend.agentList
+                        for (var i = 0; i < l.length; i++) if (l[i].id === backend.agentSetting) return l[i]
+                        return null
+                    }
+                    visible: text !== ""
+                    text: cur && cur.hint ? cur.label + ": " + cur.hint : ""
+                    color: "#e0a060"; font.family: theme.font; font.pixelSize: 11
+                    wrapMode: Text.Wrap
                 }
             }
 

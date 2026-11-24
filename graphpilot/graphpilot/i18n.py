@@ -312,6 +312,32 @@ S["ko"] = {
 }
 
 
+# ---- agents (Claude Code / Codex)
+_AGENT = {
+    "en": ("Assistant", "not installed", "run codex login",
+           "Codex not found. Install it (npm i -g @openai/codex), run `codex login` once in a terminal to sign in with ChatGPT, then try again."),
+    "ru": ("Ассистент", "не установлен", "выполни codex login",
+           "Codex не найден. Установи его (npm i -g @openai/codex), один раз выполни `codex login` в терминале и войди через ChatGPT, затем попробуй снова."),
+    "uk": ("Асистент", "не встановлено", "виконай codex login",
+           "Codex не знайдено. Встанови його (npm i -g @openai/codex), один раз виконай `codex login` у терміналі та увійди через ChatGPT, потім спробуй знову."),
+    "de": ("Assistent", "nicht installiert", "codex login ausführen",
+           "Codex nicht gefunden. Installiere es (npm i -g @openai/codex), führe einmal `codex login` im Terminal aus und melde dich mit ChatGPT an."),
+    "es": ("Asistente", "no instalado", "ejecuta codex login",
+           "No se encontró Codex. Instálalo (npm i -g @openai/codex), ejecuta `codex login` una vez en una terminal e inicia sesión con ChatGPT."),
+    "fr": ("Assistant", "non installé", "lance codex login",
+           "Codex introuvable. Installe-le (npm i -g @openai/codex), lance `codex login` une fois dans un terminal et connecte-toi avec ChatGPT."),
+    "pt": ("Assistente", "não instalado", "execute codex login",
+           "Codex não encontrado. Instale (npm i -g @openai/codex), execute `codex login` uma vez no terminal e entre com o ChatGPT."),
+    "zh": ("助手", "未安装", "请运行 codex login",
+           "未找到 Codex。请安装（npm i -g @openai/codex），在终端运行一次 `codex login` 并用 ChatGPT 登录，然后重试。"),
+    "ja": ("アシスタント", "未インストール", "codex login を実行",
+           "Codex が見つかりません。インストールし（npm i -g @openai/codex）、ターミナルで一度 `codex login` を実行して ChatGPT でサインインしてください。"),
+    "ko": ("어시스턴트", "설치되지 않음", "codex login 실행",
+           "Codex를 찾을 수 없습니다. 설치(npm i -g @openai/codex) 후 터미널에서 `codex login`을 한 번 실행해 ChatGPT로 로그인하세요."),
+}
+for _k, (_a, _m, _l, _c) in _AGENT.items():
+    S[_k].update({"assistant": _a, "agent_missing": _m, "agent_login": _l, "codex_missing": _c})
+
 def system_lang():
     code = QLocale.system().name().split("_")[0].lower()
     return code if code in S else "en"

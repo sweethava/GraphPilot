@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.0 — 2026-11-24
+
+- **ChatGPT support** through OpenAI Codex CLI: use your ChatGPT plan instead of Claude. Pick the assistant in Settings; each chat keeps the assistant it was started with.
+- Codex runs read-only (its sandbox) plus the Designer tools; attached screenshots are passed to it directly.
+- Fixed: Designer API errors inside tools were hidden behind a generic error.
+- Fixed: placing library nodes from packages whose first graph is a function graph.
+- Chat list: side padding; renaming is cancelled by Esc or clicking away.
+- The tool-steps button shows whether steps are hidden.
+
 ## 1.0.0 — 2026-11-24
 
 First public release.

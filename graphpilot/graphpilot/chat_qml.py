@@ -16,6 +16,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from PySide6.QtCore import Property, QObject, QUrl, Signal, Slot, Qt
 
 from . import chat_panel  # reuse claude path, prompt, tool list
+from . import agents
 from . import i18n
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -28,12 +29,8 @@ else:
 CHAT_DIR = os.path.join(DATA_DIR, "chats")
 INDEX_PATH = os.path.join(CHAT_DIR, "index.json")
 IMG_DIR = os.path.join(DATA_DIR, "images")   # persistent, so history thumbnails survive restarts
-HIDDEN_TOOLS = {"ToolSearch"}
 IMG_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".webp", ".gif", ".tga", ".tif", ".tiff"}
 MAX_IMAGES = 6
-# Claude Code aliases always resolve to the newest model of each family;
-# the exact version is learned from the `init` event of each run.
-MODELS = ["fable", "opus", "sonnet", "haiku"]
 FONTS = ["onest", "inter", "system"]
 _FONT_FILES = {"onest": "Onest-Variable.ttf", "inter": "InterVariable.ttf"}
 _font_families = {}
@@ -74,14 +71,6 @@ def load_fonts():
             fams = QtGui.QFontDatabase.applicationFontFamilies(fid) if fid >= 0 else []
             _font_families[key] = fams[0] if fams else ""
     _font_families["system"] = QtGui.QGuiApplication.font().family()
-
-
-def pretty_model(model_id, alias=""):
-    """'claude-opus-5-5' -> 'Opus 5.5'; unknown ids -> capitalized alias."""
-    m = re.match(r"^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?$", model_id or "")
-    if m:
-        return "%s %s%s" % (m.group(1).capitalize(), m.group(2), "." + m.group(3) if m.group(3) else "")
-    return (alias or model_id or "").capitalize()
 
 
 _BULLET = re.compile(r"^(\s*)[-*+]\s+(.*)$")
@@ -250,10 +239,18 @@ class ChatBackend(QObject):
         self._quiet_results = set()  # tool_use ids whose image results are not shown
         self._stderr = ""
         st = _settings()
-        self._model = str(st.value("model", "opus") or "opus")
+        if st.contains("model") and not st.contains("model/claude"):   # pre-agents settings
+            st.setValue("model/claude", st.value("model"))
+            st.remove("model")
+        self._agent_setting = str(st.value("agent", "claude") or "claude")
+        if self._agent_setting not in agents.AGENTS:
+            self._agent_setting = "claude"
+        self._chat_agent = None    # agent of the open chat (a chat always continues with its own agent)
         self._lang_setting = str(st.value("language", "auto") or "auto")
         self._font_setting = str(st.value("font", "onest") or "onest")
-        self._resolved = {m: str(st.value("resolved/" + m, "") or "") for m in MODELS}
+        self._resolved = {m: str(st.value("resolved/" + m, "") or "") for m in agents.ClaudeAgent.MODELS}
+        self._run_started = 0.0
+        self._last_error = ""
         self._tr = i18n.table(i18n.resolve(self._lang_setting))
         # chat history
         self._chat_id = None
@@ -371,15 +368,75 @@ class ChatBackend(QObject):
 
     attachmentLabel = Property(str, _get_attach_label, notify=attachmentChanged)
 
+    # ------------------------------------------------------------ agent + model
     modelChanged = Signal()
+
+    @property
+    def _agent_id(self):
+        return self._chat_agent or self._agent_setting
+
+    @property
+    def _agent(self):
+        return agents.AGENTS[self._agent_id]
+
+    def _get_agent_id(self):
+        return self._agent_id
+
+    agent = Property(str, _get_agent_id, notify=modelChanged)
+
+    def _get_agent_setting(self):
+        return self._agent_setting
+
+    agentSetting = Property(str, _get_agent_setting, notify=modelChanged)
+
+    def _get_agents(self):
+        out = []
+        for aid in agents.ORDER:
+            a = agents.AGENTS[aid]
+            found = bool(a.find())
+            hint = "" if a.ready() else (self.t("agent_login") if found else self.t("agent_missing"))
+            out.append({"id": aid, "label": a.label, "ready": a.ready(), "hint": hint})
+        return out
+
+    agentList = Property("QVariantList", _get_agents, notify=modelChanged)
+
+    @Slot()
+    def refreshAgents(self):
+        """Re-check installs/logins (the user may have just run `codex login`)."""
+        self.modelChanged.emit()
+
+    @Slot(str)
+    def setAgent(self, aid):
+        if aid not in agents.AGENTS or aid == self._agent_setting:
+            return
+        self._agent_setting = aid
+        _settings().setValue("agent", aid)
+        if self._msgs:
+            self._reset_chat()          # a conversation can't move between agents: start a new one
+        else:
+            self._chat_agent = None
+        self.modelChanged.emit()
+
+    @property
+    def _model(self):
+        a = self._agent
+        m = _settings().value("model/" + a.id, None)
+        valid = [x["id"] for x in a.models(self.t, self._resolved)]
+        if m is None or str(m) not in valid:
+            m = a.default_model(self._resolved)
+        return str(m or "")
 
     def _get_model(self):
         return self._model
 
     model = Property(str, _get_model, notify=modelChanged)
 
-    def _label(self, alias):
-        return self._resolved.get(alias) or alias.capitalize()
+    def _label(self, model, agent=None):
+        a = agent or self._agent
+        for x in a.models(self.t, self._resolved):
+            if x["id"] == model:
+                return x["label"]
+        return model.capitalize() if model else "Default"
 
     def _get_model_label(self):
         return self._label(self._model)
@@ -387,28 +444,25 @@ class ChatBackend(QObject):
     modelLabel = Property(str, _get_model_label, notify=modelChanged)
 
     def _get_models(self):
-        return [{"id": m, "label": self._label(m), "hint": self.t("hint_" + m)} for m in MODELS]
+        return self._agent.models(self.t, self._resolved)
 
     models = Property("QVariantList", _get_models, notify=modelChanged)
 
     @Slot(str)
     def setModel(self, m):
         if m != self._model:
-            self._model = m
-            _settings().setValue("model", m)
+            _settings().setValue("model/" + self._agent.id, m)
             self.modelChanged.emit()
 
-    def _learn_model(self, alias, model_id):
-        label = pretty_model(model_id, alias)
-        if alias in MODELS and label.lower().startswith(alias) and self._resolved.get(alias) != label:
+    def _learn_model(self, agent, alias, model_id):
+        """Claude: remember which exact version an alias resolved to ('opus' -> 'Opus 5.5')."""
+        if agent.id != "claude":
+            return
+        label = agent.pretty_model(model_id, alias)
+        if label and self._resolved.get(alias) != label:
             self._resolved[alias] = label
             _settings().setValue("resolved/" + alias, label)
             self.modelChanged.emit()
-
-    @Slot()
-    def retry(self):
-        if self._last_prompt and not self._busy:
-            self._run(self._last_prompt)
 
     graphChanged = Signal()
 
@@ -498,7 +552,8 @@ class ChatBackend(QObject):
         title = self._chat_title or self._auto_title()
         d = {"id": self._chat_id, "title": title, "custom_title": bool(self._chat_title),
              "created": self._chat_created, "updated": now, "session_id": self.session_id,
-             "model": self._model, "last_prompt": self._last_prompt, "messages": self._msgs}
+             "agent": self._agent_id, "model": self._model, "last_prompt": self._last_prompt,
+             "messages": self._msgs}
         try:
             os.makedirs(CHAT_DIR, exist_ok=True)
             p = os.path.join(CHAT_DIR, self._chat_id + ".json")
@@ -540,12 +595,15 @@ class ChatBackend(QObject):
         self._live_idx = -1
         self._last_prompt = ""
         self._quiet_results = set()
+        had_agent, self._chat_agent = self._chat_agent, None
         self.clearAttachment()
         self._clear_images()
         self.cleared.emit()
         self._set_status("")
         if old:
             self._chat_model.refresh(old)
+        if had_agent and had_agent != self._agent_setting:
+            self.modelChanged.emit()
 
     @Slot()
     def newChat(self):
@@ -567,6 +625,8 @@ class ChatBackend(QObject):
         self._chat_created = d.get("created") or 0
         self._chat_title = d.get("title") if d.get("custom_title") else None
         self.session_id = d.get("session_id")
+        self._chat_agent = d.get("agent") if d.get("agent") in agents.AGENTS else "claude"
+        self.modelChanged.emit()
         self._last_prompt = d.get("last_prompt") or ""
         self._msgs = list(d.get("messages") or [])
         for m in self._msgs:
@@ -774,32 +834,36 @@ class ChatBackend(QObject):
             shown = ("📎 " + self._attach_label + "\n\n" + text).strip()
         if shown:
             self._emit("user", shown, "")
-        prompt = self._attach
-        if self._images:
-            prompt += ("[The user attached images (screenshots). First open each one with the Read tool "
-                       "and take them into account: %s]\n" % "; ".join(self._images))
-        prompt += text or self.t("look_at_images")
+        prompt = self._attach + (text or self.t("look_at_images"))
+        images = list(self._images)
         self.clearAttachment()
         self._clear_images()
+        if self._chat_agent is None:
+            self._chat_agent = self._agent_setting      # the chat is now bound to this agent
         self._last_prompt = prompt
+        self._last_images = images
         self._save_chat()
-        self._run(prompt)
+        self._run(prompt, images)
 
-    def _run(self, prompt):
+    @Slot()
+    def retry(self):
+        if self._last_prompt and not self._busy:
+            self._run(self._last_prompt, getattr(self, "_last_images", []))
+
+    def _run(self, prompt, images=()):
         self.graphChanged.emit()
-        self._run_model = self._model
-        claude = chat_panel._find_claude()
-        if not claude:
-            self._emit("error", self.t("cant_start"))
+        agent = self._agent
+        self._run_agent, self._run_model = agent, self._model
+        exe = agent.find()
+        if not exe:
+            self._emit("error", self.t("cant_start") if agent.id == "claude" else self.t("codex_missing"))
             self._save_chat()
             return
-        args = ["-p", prompt, "--output-format", "stream-json", "--verbose",
-                "--include-partial-messages", "--model", self._model, *chat_panel.claude_base_args()]
-        if self.session_id:
-            args += ["--resume", self.session_id]
+        args, stdin_text = agent.build(prompt, self._run_model, self.session_id,
+                                       [p for p in images if os.path.isfile(p)])
         self.proc = QtCore.QProcess(self)
         self.proc.setWorkingDirectory(chat_panel.WORKDIR)
-        self.proc.setProcessEnvironment(chat_panel.child_env())
+        self.proc.setProcessEnvironment(agent.env(chat_panel.child_env()))
         self.proc.readyReadStandardOutput.connect(self._on_stdout)
         self.proc.readyReadStandardError.connect(self._on_stderr)
         self.proc.finished.connect(self._on_finished)
@@ -807,7 +871,11 @@ class ChatBackend(QObject):
         self._buf = b""
         self._live = None
         self._stderr = ""
-        self.proc.start(claude, args)
+        self._last_error = ""
+        self._run_started = time.time()
+        self.proc.start(exe, args)
+        if stdin_text is not None:
+            self.proc.write(stdin_text.encode("utf-8"))
         self.proc.closeWriteChannel()
         self._set_busy(True)
         self._set_status(self.t("thinking"), "thinking")
@@ -815,10 +883,12 @@ class ChatBackend(QObject):
     # ------------------------------------------------------------ process io
     def _on_error(self, err):
         if err == QtCore.QProcess.FailedToStart:
-            self._emit("error", self.t("cant_start"))
+            agent = getattr(self, "_run_agent", self._agent)
+            self._emit("error", self.t("cant_start") if agent.id == "claude" else self.t("codex_missing"))
 
     def _on_stderr(self):
         self._stderr += bytes(self.proc.readAllStandardError()).decode("utf-8", "replace")
+        self._stderr = self._stderr[-20000:]
 
     def _on_finished(self, code, status):
         self._on_stdout()
@@ -826,9 +896,9 @@ class ChatBackend(QObject):
         self._set_busy(False)
         if status == QtCore.QProcess.CrashExit and self._phase:
             self._set_status(self.t("stopped"))
-        elif code != 0 and self._stderr.strip():
+        elif code != 0 and self._stderr.strip() and not self._last_error:
             self._emit("error", self._stderr.strip()[-600:])
-        if self._phase in ("thinking", "tool"):
+        if self._phase in ("thinking", "tool", "writing"):
             self._set_status("")
         self._save_chat()
 
@@ -846,78 +916,75 @@ class ChatBackend(QObject):
             except Exception:
                 continue
             try:
-                self._handle(ev)
+                for e in self._run_agent.parse(ev):
+                    self._handle(e)
             except Exception as e:
                 print("[GraphPilot] event error:", e)
 
     def _close_live(self):
         self._live = None
 
-    def _handle(self, ev):
-        t = ev.get("type")
-        if ev.get("session_id"):
-            self.session_id = ev["session_id"]
+    def _error(self, text):
+        text = (text or "").strip()
+        if text and text != self._last_error:
+            self._last_error = text
+            self._emit("error", text)
 
-        if t == "system" and ev.get("subtype") == "init" and ev.get("model"):
-            self._learn_model(getattr(self, "_run_model", self._model), ev["model"])
-
-        elif t == "stream_event":
-            e = ev.get("event", {})
-            if e.get("type") == "content_block_delta" and e.get("delta", {}).get("type") == "text_delta":
-                chunk = e["delta"].get("text", "")
-                if self._live is None:
-                    self._live = chunk
-                    self._emit("assistant", pretty_md(self._live))
-                    self._live_idx = len(self._msgs) - 1
-                else:
-                    self._live += chunk
-                    md = pretty_md(self._live)
-                    if 0 <= self._live_idx < len(self._msgs):
-                        self._msgs[self._live_idx]["text"] = md
-                    self.lastTextUpdated.emit(md)
-                self._set_status(self.t("writing"), "writing")
-
-        elif t == "assistant":
-            for block in ev.get("message", {}).get("content", []):
-                bt = block.get("type")
-                if bt == "text":
-                    if self._live is None and block.get("text"):
-                        self._emit("assistant", pretty_md(block["text"]))
-                    self._close_live()
-                elif bt == "tool_use":
-                    self._close_live()
-                    name = block.get("name", "")
-                    short = name.replace("mcp__substance-designer__", "")
-                    inp = block.get("input") or {}
-                    if name == "Read" and os.path.basename(str(inp.get("file_path", ""))).startswith("shot_"):
-                        # Claude looking at a screenshot the user attached: don't echo the image back
-                        self._quiet_results.add(block.get("id"))
-                        self._emit("tool", self.t("viewing_shot_step"))
-                        self._set_status(self.t("viewing_shot"), "tool")
-                        continue
-                    if name not in HIDDEN_TOOLS:
-                        self._emit("tool", self._tool_label(short, inp))
-                    if name in HIDDEN_TOOLS:
-                        self._set_status(self.t("thinking"), "thinking")
-                    else:
-                        self._set_status("⚙ " + short, "tool")
-
-        elif t == "user":
-            content = ev.get("message", {}).get("content", [])
-            if isinstance(content, list):
-                for block in content:
-                    if block.get("type") == "tool_result":
-                        self._tool_result(block)
-
-        elif t == "result":
-            if ev.get("is_error"):
-                self._emit("error", str(ev.get("result") or ev.get("subtype")))
-            secs = int(round((ev.get("duration_ms") or 0) / 1000.0))
-            if secs >= 60:
-                took = self.t("min_sec") % (secs // 60, secs % 60)
+    def _handle(self, e):
+        """Normalized agent events (see agents.py)."""
+        t = e["t"]
+        if t == "session":
+            self.session_id = e["id"]
+        elif t == "model":
+            self._learn_model(self._run_agent, self._run_model, e["id"])
+        elif t == "delta":
+            if self._live is None:
+                self._live = e["text"]
+                self._emit("assistant", pretty_md(self._live))
+                self._live_idx = len(self._msgs) - 1
             else:
-                took = self.t("sec") % secs if secs else ""
-            model = self._label(getattr(self, "_run_model", self._model))
+                self._live += e["text"]
+                md = pretty_md(self._live)
+                if 0 <= self._live_idx < len(self._msgs):
+                    self._msgs[self._live_idx]["text"] = md
+                self.lastTextUpdated.emit(md)
+            self._set_status(self.t("writing"), "writing")
+        elif t == "text":
+            if self._live is None:
+                self._emit("assistant", pretty_md(e["text"]))
+            self._close_live()
+        elif t == "shot":
+            self._close_live()
+            self._quiet_results.add(e.get("id"))     # don't echo the user's own screenshot back
+            self._emit("tool", self.t("viewing_shot_step"))
+            self._set_status(self.t("viewing_shot"), "tool")
+        elif t == "thinking":
+            self._set_status(self.t("thinking"), "thinking")
+        elif t == "tool":
+            self._close_live()
+            self._emit("tool", self._tool_label(e["name"], e.get("input") or {}))
+            self._set_status("⚙ " + e["name"], "tool")
+        elif t == "result":
+            if e.get("id") not in self._quiet_results:
+                for data in e.get("images") or []:
+                    os.makedirs(IMG_DIR, exist_ok=True)
+                    p = os.path.join(IMG_DIR, "render_%d.png" % int(time.time() * 1000))
+                    with open(p, "wb") as f:
+                        f.write(base64.b64decode(data))
+                    self._emit("image", "", QUrl.fromLocalFile(p).toString())
+            if self._phase == "tool":
+                self._set_status(self.t("thinking"), "thinking")
+        elif t == "error":
+            self._error(e["text"])
+        elif t == "done":
+            if e.get("error"):
+                self._error(e["error"])
+            agent = self._run_agent
+            if agent.id == "codex" and self.session_id and not self._run_model:
+                self._run_model = agent.model_of_session(self.session_id) or ""
+            secs = int(round(time.time() - self._run_started)) if self._run_started else 0
+            took = (self.t("min_sec") % (secs // 60, secs % 60)) if secs >= 60 else (self.t("sec") % secs if secs else "")
+            model = self._label(self._run_model, agent) if self._run_model else agent.label
             self._set_status(" · ".join(p for p in (model, took) if p))
 
     @staticmethod
@@ -930,20 +997,6 @@ class ChatBackend(QObject):
         if name == "sd_execute_python":
             detail = "python"
         return name + (" · " + detail if detail and detail != "python" else "")
-
-    def _tool_result(self, block):
-        content = block.get("content")
-        if not isinstance(content, list) or block.get("tool_use_id") in self._quiet_results:
-            return
-        for c in content:
-            if c.get("type") == "image":
-                data = (c.get("source") or {}).get("data")
-                if data:
-                    os.makedirs(IMG_DIR, exist_ok=True)
-                    p = os.path.join(IMG_DIR, "render_%d.png" % int(time.time() * 1000))
-                    with open(p, "wb") as f:
-                        f.write(base64.b64decode(data))
-                    self._emit("image", "", QUrl.fromLocalFile(p).toString())
 
 
 _keep = []

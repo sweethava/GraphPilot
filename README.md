@@ -2,7 +2,7 @@
 
 **An AI chat panel inside Adobe Substance 3D Designer.** Ask about the open graph, have it build or tweak a material, show it a screenshot — it works on your graph directly: creates and connects nodes, sets parameters, renders outputs to check its own work.
 
-Works with **[Claude Code](https://claude.com/claude-code)**, so it runs on your existing Claude subscription (Pro / Max) or an Anthropic API key. No extra accounts, no extra servers.
+Works with **[Claude Code](https://claude.com/claude-code)** or **[OpenAI Codex](https://github.com/openai/codex)**, so it runs on the subscription you already have: Claude (Pro / Max) or ChatGPT (Plus / Pro / Business), or an API key. No extra accounts, no extra servers.
 
 <p align="center">
   <img src="docs/images/chat.png" width="380" alt="GraphPilot builds a brick material and shows the render">
@@ -27,16 +27,19 @@ Works with **[Claude Code](https://claude.com/claude-code)**, so it runs on your
 - **Sees the result**: renders node outputs and looks at them before answering.
 - **Screenshots**: paste with Ctrl+V, drag & drop, one-click "Screenshot of Designer", pick from disk, or attach the selected nodes.
 - **Chat history**: search, rename, delete; every chat resumes with full context.
-- **Model picker**: Fable, Opus, Sonnet, Haiku — always the newest version of each.
+- **Claude or ChatGPT**: switch the assistant in Settings. Each chat remembers which one it was started with.
+- **Model picker**: Claude's Fable, Opus, Sonnet, Haiku (always the newest version of each), or the models your ChatGPT plan offers in Codex.
 - **10 languages**: English, Русский, Українська, Deutsch, Español, Français, Português, 中文, 日本語, 한국어 (follows your OS, switchable in Settings).
 - **Fonts**: Onest, Inter, or your system font.
 
 ## Requirements
 
 - Adobe Substance 3D Designer **16.0** or newer (tested on 16.0.3, Windows).
-- **Claude Code** installed and signed in: install it from [claude.com/claude-code](https://claude.com/claude-code), then run `claude` once in a terminal and log in.
+- One of:
+  - **Claude Code**, installed and signed in: install it from [claude.com/claude-code](https://claude.com/claude-code), then run `claude` once in a terminal and log in.
+  - **Codex CLI**, installed and signed in: `npm i -g @openai/codex`, then run `codex login` once and sign in with ChatGPT.
 
-Nothing else: the MCP server that connects Claude to Designer ships with the plugin and runs on the Python that comes with Designer.
+Nothing else: the MCP server that connects the assistant to Designer ships with the plugin and runs on the Python that comes with Designer.
 
 ## Install
 
@@ -57,16 +60,17 @@ To update, replace the `graphpilot` folder and restart Designer. Your chats and 
 
 ## Privacy & security
 
-- Your messages, graph information and attached images are sent to Anthropic through Claude Code, under your Claude account's terms. GraphPilot itself has no servers and collects nothing.
+- Your messages, graph information and attached images are sent to Anthropic (through Claude Code) or OpenAI (through Codex), under your account's terms with that provider. GraphPilot itself has no servers and collects nothing.
 - Chats are stored locally: `%APPDATA%\GraphPilot` (Windows), `~/Library/Application Support/GraphPilot` (macOS).
 - The plugin opens a bridge on **127.0.0.1:9881** (local machine only) that runs Python inside Designer — that is how Claude edits the graph. Any program on your computer could use it while Designer is running, so only run software you trust.
-- In the panel Claude may use the Designer tools, read files (`Read`, `Glob`, `Grep`) and search the web. One of the Designer tools runs Python inside Designer, so in practice Claude has the same access to your computer as Designer itself. Review what it does in the tool steps.
+- In the panel Claude may use the Designer tools, read files (`Read`, `Glob`, `Grep`) and search the web. Codex runs in its read-only sandbox plus the Designer tools. One of the Designer tools runs Python inside Designer, so in practice Claude has the same access to your computer as Designer itself. Review what it does in the tool steps.
 
 ## Troubleshooting
 
 | Problem | Fix |
 |---|---|
 | "Claude Code not found" | Install Claude Code, run `claude` in a terminal once, restart Designer. |
+| "Codex not found" / "run codex login" in Settings | `npm i -g @openai/codex`, then `codex login` in a terminal. Reopen Settings. |
 | "Invalid API key / please run /login" | Run `claude` in a terminal and sign in again. |
 | "Cannot reach the Substance Designer bridge" | Another program uses port 9881, or a second Designer instance is running. Close it and restart Designer. |
 | Fable says it "requires usage credits" | Your plan doesn't include Fable; pick another model. |
@@ -87,7 +91,8 @@ graphpilot/                 ← the plugin folder that goes into sduserplugins
   graphpilot/
     __init__.py             plugin entry + TCP bridge (runs code on Designer's main thread)
     helpers.py              graph operations used by the tools
-    mcp_server.py           MCP stdio server (stdlib only) launched by Claude Code
+    mcp_server.py           MCP stdio server (stdlib only) launched by the assistant CLI
+    agents.py               Claude Code / Codex adapters (launch args, event parsing)
     chat_qml.py, chat.qml   the chat panel (backend + UI)
     chat_panel.py           Claude Code launch settings + basic fallback panel
     i18n.py                 UI strings
@@ -101,4 +106,4 @@ Bugs and ideas: [Issues](../../issues). If GraphPilot saves you time, you can su
 
 [MIT](LICENSE) © SweetHava. Bundled fonts: see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-GraphPilot is an independent project, not affiliated with or endorsed by Adobe or Anthropic. Adobe and Substance 3D are trademarks of Adobe Inc.; Claude is a trademark of Anthropic, PBC.
+GraphPilot is an independent project, not affiliated with or endorsed by Adobe, Anthropic or OpenAI. Adobe and Substance 3D are trademarks of Adobe Inc.; Claude is a trademark of Anthropic, PBC; ChatGPT and Codex are trademarks of OpenAI.
