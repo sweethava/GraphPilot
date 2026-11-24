@@ -1,4 +1,8 @@
-# GraphPilot
+<p align="center">
+  <img src="docs/logo/logo.png" width="112" alt="GraphPilot logo">
+</p>
+
+<h1 align="center">GraphPilot</h1>
 
 **An AI chat panel inside Adobe Substance 3D Designer.** Ask about the open graph, have it build or tweak a material, show it a screenshot — it works on your graph directly: creates and connects nodes, sets parameters, renders outputs to check its own work.
 

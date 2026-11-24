@@ -227,13 +227,9 @@ Rectangle {
         width: list.width - 48
         Image {
             anchors.horizontalCenter: parent.horizontalCenter
-            source: root.icon("logo")
-            sourceSize: Qt.size(40, 40)
-            width: 40; height: 40
-            RotationAnimation on rotation {
-                running: backend.busy; loops: Animation.Infinite
-                from: 0; to: 360; duration: 4000
-            }
+            source: Qt.resolvedUrl("icons/logo.png")
+            width: 56; height: 56
+            smooth: true; mipmap: true
         }
         Text {
             width: parent.width
