@@ -49,6 +49,8 @@ THUMB_DIR = os.path.join(DATA_DIR, "thumbs")  # rounded display copies (QtQuick 
 IMG_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".webp", ".gif", ".tga", ".tif", ".tiff"}
 MAX_IMAGES = 6
 FONTS = ["onest", "inter", "system"]
+# colour themes (palettes live in chat.qml); labels are names, not translated
+THEMES = [("graphite", "Graphite"), ("designer", "Designer"), ("midnight", "Midnight"), ("ember", "Ember")]
 _FONT_FILES = {"onest": "Onest-Variable.ttf", "inter": "InterVariable.ttf"}
 _font_families = {}
 
@@ -267,6 +269,9 @@ class ChatBackend(QObject):
         self._chat_agent = None    # agent of the open chat (a chat always continues with its own agent)
         self._lang_setting = str(st.value("language", "auto") or "auto")
         self._font_setting = str(st.value("font", "onest") or "onest")
+        self._theme_setting = str(st.value("theme", "graphite") or "graphite")
+        if self._theme_setting not in dict(THEMES):
+            self._theme_setting = "graphite"
         self._resolved = {m: str(st.value("resolved/" + m, "") or "") for m in agents.ClaudeAgent.MODELS}
         self._run_started = 0.0
         self._last_error = ""
@@ -342,6 +347,23 @@ class ChatBackend(QObject):
         if key in FONTS:
             self._font_setting = key
             _settings().setValue("font", key)
+            self.settingsChanged.emit()
+
+    def _get_theme(self):
+        return self._theme_setting
+
+    theme = Property(str, _get_theme, notify=settingsChanged)
+
+    def _get_themes(self):
+        return [{"id": k, "label": v} for k, v in THEMES]
+
+    themes = Property("QVariantList", _get_themes, notify=settingsChanged)
+
+    @Slot(str)
+    def setTheme(self, key):
+        if key in dict(THEMES):
+            self._theme_setting = key
+            _settings().setValue("theme", key)
             self.settingsChanged.emit()
 
     def _when(self, ts):

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Colour themes in Settings: Graphite (the old look), Designer (Designer's own green), Midnight and Ember.
+
 ## 1.2.2 — 2026-11-24
 
 - Faster mouse-wheel scrolling in the chat and the chat list (about 112 px per notch, with a short glide).

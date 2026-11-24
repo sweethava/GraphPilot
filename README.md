@@ -35,6 +35,7 @@ Works with **[Claude Code](https://claude.com/claude-code)** or **[OpenAI Codex]
 - **Model picker**: Claude's Fable, Opus, Sonnet, Haiku (always the newest version of each), or the models your ChatGPT plan offers in Codex.
 - **10 languages**: English, Русский, Українська, Deutsch, Español, Français, Português, 中文, 日本語, 한국어 (follows your OS, switchable in Settings).
 - **Fonts**: Onest, Inter, or your system font.
+- **Themes**: Graphite, Designer (the green of Designer's own icon), Midnight and Ember.
 
 ## Requirements
 

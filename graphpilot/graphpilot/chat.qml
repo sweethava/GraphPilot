@@ -9,20 +9,52 @@ Rectangle {
     // UI strings for the current language (backend.tr is a map: key -> text)
     readonly property var tx: backend.tr
 
+    // Colour themes. Every grey is a neutral tone tinted toward the theme's colour, so a theme
+    // is just {tint, accent}. Primary buttons, the send button and the status dot use the accent.
+    readonly property var palettes: ({
+        graphite: { tint: "#00000000", accent: "#ececee", accentHover: "#ffffff", onAccent: "#1e1e20", ok: "#5fbf86" },
+        designer: { tint: "#1199e83f", accent: "#99e83f", accentHover: "#b2f566", onAccent: "#1e3101", ok: "#99e83f" },
+        midnight: { tint: "#145b8cff", accent: "#8fb4ff", accentHover: "#abc8ff", onAccent: "#0c1a36", ok: "#8fb4ff" },
+        ember:    { tint: "#10ff8a3d", accent: "#ff9a52", accentHover: "#ffb27a", onAccent: "#2b1203", ok: "#ff9a52" }
+    })
+    readonly property var pal: palettes[backend.theme] || palettes.graphite
+    function tone(c) { return Qt.tint(c, pal.tint) }
+    function toneText(c) { var t = Qt.color(pal.tint); return Qt.tint(c, Qt.rgba(t.r, t.g, t.b, t.a / 3)) }
+
     QtObject {
         id: theme
-        readonly property color bg: "#1e1e20"
-        readonly property color surface: "#2a2a2d"      // header buttons, user bubble
-        readonly property color composer: "#2c2c2f"
-        readonly property color hover: "#343438"
-        readonly property color line: "#323235"
-        readonly property color text: "#ececee"
-        readonly property color body: "#e2e2e4"
-        readonly property color dim: "#9a9a9f"
-        readonly property color faint: "#6c6c71"
+        readonly property color bg: root.tone("#1e1e20")
+        readonly property color surface: root.tone("#2a2a2d")      // header buttons, user bubble
+        readonly property color composer: root.tone("#2c2c2f")
+        readonly property color hover: root.tone("#343438")
+        readonly property color line: root.tone("#323235")
+        readonly property color menu: root.tone("#2f2f33")
+        readonly property color menuLine: root.tone("#3e3e43")
+        readonly property color card: root.tone("#26262a")
+        readonly property color sheet: root.tone("#252528")         // settings dialog
+        readonly property color sidebar: root.tone("#19191b")       // chat list drawer
+        readonly property color field: root.tone("#232326")
+        readonly property color raised: root.tone("#2e2e32")
+        readonly property color rowHot: root.tone("#242427")
+        readonly property color well: root.tone("#1c1c1e")          // segmented controls
+        readonly property color wellSel: root.tone("#3a3a3f")
+        readonly property color chip: root.tone("#38383c")
+        readonly property color chipHover: root.tone("#424247")
+        readonly property color outline: root.tone("#4a4a4f")
+        readonly property color focusLine: root.tone("#3c3c40")
+        readonly property color selection: root.tone("#55555c")
+        readonly property color scroll: root.tone("#55555a")
+        readonly property color tip: root.tone("#0f0f10")
+        readonly property color imageBg: root.tone("#151517")
+        readonly property color text: root.toneText("#ececee")
+        readonly property color body: root.toneText("#e2e2e4")
+        readonly property color dim: root.toneText("#9a9a9f")
+        readonly property color faint: root.toneText("#6c6c71")
         readonly property color error: "#e46a63"
-        readonly property color menu: "#2f2f33"
-        readonly property color menuLine: "#3e3e43"
+        readonly property color accent: pal.accent
+        readonly property color accentHover: pal.accentHover
+        readonly property color onAccent: pal.onAccent
+        readonly property color ok: pal.ok
         readonly property string font: backend.fontFamily
         readonly property int fs: 13
     }
@@ -105,7 +137,7 @@ Rectangle {
                     id: dot
                     anchors.verticalCenter: parent.verticalCenter
                     width: 6; height: 6; radius: 3
-                    color: backend.busy ? "#f2f2f3" : "#5fbf86"
+                    color: backend.busy ? "#f2f2f3" : theme.ok
                     SequentialAnimation on opacity {
                         running: backend.busy; loops: Animation.Infinite
                         NumberAnimation { to: 0.25; duration: 550 }
@@ -218,7 +250,7 @@ Rectangle {
         anchors.right: list.right
         anchors.rightMargin: 3
         width: 4; radius: 2
-        color: "#55555a"
+        color: theme.scroll
         visible: list.contentHeight > list.height
         opacity: list.moving ? 0.9 : 0.35
         Behavior on opacity { NumberAnimation { duration: 250 } }
@@ -265,7 +297,7 @@ Rectangle {
         anchors { left: parent.left; right: parent.right; bottom: composer.top; leftMargin: 12; rightMargin: 12; bottomMargin: 8 }
         height: visible ? setupCol.height + 28 : 0
         radius: 12
-        color: "#26262a"
+        color: theme.card
         border.color: theme.menuLine
 
         Column {
@@ -316,8 +348,8 @@ Rectangle {
                 Rectangle {
                     visible: !!setupCard.s.button
                     width: primT.implicitWidth + 28; height: 30; radius: 8
-                    color: primMa.containsMouse ? "#ffffff" : "#ececee"
-                    Text { id: primT; anchors.centerIn: parent; text: setupCard.s.button || ""; color: "#1e1e20"; font.family: theme.font; font.pixelSize: 12; font.weight: Font.Medium }
+                    color: primMa.containsMouse ? theme.accentHover : theme.accent
+                    Text { id: primT; anchors.centerIn: parent; text: setupCard.s.button || ""; color: theme.onAccent; font.family: theme.font; font.pixelSize: 12; font.weight: Font.Medium }
                     MouseArea { id: primMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: backend.runSetup() }
                 }
                 Rectangle {
@@ -344,7 +376,7 @@ Rectangle {
         height: (attachBar.visible ? attachBar.height + 10 : 0) + inputArea.height + 48
         radius: 14
         color: theme.composer
-        border.color: input.activeFocus ? "#3c3c40" : "transparent"
+        border.color: input.activeFocus ? theme.focusLine : "transparent"
         Behavior on border.color { ColorAnimation { duration: 150 } }
 
         // attachments: node chip + screenshot thumbnails
@@ -361,7 +393,7 @@ Rectangle {
                 height: 26
                 width: chipRow.width + 20
                 radius: 7
-                color: chipMa.containsMouse && !xMa.containsMouse ? "#424247" : "#38383c"
+                color: chipMa.containsMouse && !xMa.containsMouse ? theme.chipHover : theme.chip
                 Behavior on color { ColorAnimation { duration: 120 } }
                 MouseArea {
                     id: chipMa
@@ -394,7 +426,7 @@ Rectangle {
                 model: backend.images
                 Rectangle {
                     width: 56; height: 56; radius: 8
-                    color: "#38383c"
+                    color: theme.chip
                     clip: true
                     Image {
                         anchors.fill: parent
@@ -435,7 +467,7 @@ Rectangle {
                 wrapMode: TextEdit.Wrap
                 font.family: theme.font; font.pixelSize: 14
                 selectByMouse: true
-                selectionColor: "#55555c"
+                selectionColor: theme.selection
                 focus: true
                 onCursorRectangleChanged: inputArea.ensureVisible(cursorRectangle)
                 Keys.onPressed: function(e) {
@@ -467,7 +499,7 @@ Rectangle {
                 anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                 width: 28; height: 28; radius: 14
                 color: plusMa.containsMouse ? theme.hover : "transparent"
-                border.color: "#4a4a4f"; border.width: 1
+                border.color: theme.outline; border.width: 1
                 Image { anchors.centerIn: parent; source: root.icon("plus"); sourceSize: Qt.size(16, 16); width: 16; height: 16 }
                 MouseArea {
                     id: plusMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
@@ -506,7 +538,7 @@ Rectangle {
                 anchors { right: parent.right; verticalCenter: parent.verticalCenter }
                 width: 30; height: 30; radius: 15
                 property bool canSend: input.text.trim().length > 0 || backend.images.length > 0
-                color: (backend.busy || canSend) ? (sendMa.containsMouse ? "#ffffff" : "#ececee") : "#4a4a4f"
+                color: (backend.busy || canSend) ? (sendMa.containsMouse ? theme.accentHover : theme.accent) : theme.outline
                 Behavior on color { ColorAnimation { duration: 140 } }
                 scale: sendMa.pressed ? 0.92 : 1
                 Behavior on scale { NumberAnimation { duration: 90 } }
@@ -572,8 +604,8 @@ Rectangle {
             anchors.margins: 8
             visible: drop.containsDrag
             radius: 14
-            color: "#cc1e1e20"
-            border.color: "#6c6c71"; border.width: 1
+            color: Qt.rgba(theme.bg.r, theme.bg.g, theme.bg.b, 0.8)
+            border.color: theme.faint; border.width: 1
             Column {
                 anchors.centerIn: parent
                 spacing: 10
@@ -608,7 +640,7 @@ Rectangle {
         x: open ? 0 : -width - 2
         visible: x > -width - 2
         Behavior on x { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
-        color: "#19191b"
+        color: theme.sidebar
         Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: theme.line }
         MouseArea { anchors.fill: parent; hoverEnabled: true; onClicked: drawer.editing = "" }
 
@@ -639,14 +671,14 @@ Rectangle {
             id: searchBox
             x: 8; anchors.top: dNew.bottom; anchors.topMargin: 6
             width: parent.width - 16; height: 32; radius: 8
-            color: "#232326"
-            border.color: search.activeFocus ? "#3c3c40" : "transparent"
+            color: theme.field
+            border.color: search.activeFocus ? theme.focusLine : "transparent"
             Image { x: 10; anchors.verticalCenter: parent.verticalCenter; source: root.icon("search"); sourceSize: Qt.size(14, 14); width: 14; height: 14; opacity: 0.7 }
             TextInput {
                 id: search
                 x: 32; width: parent.width - 60
                 anchors.verticalCenter: parent.verticalCenter
-                color: theme.text; selectionColor: "#55555c"
+                color: theme.text; selectionColor: theme.selection
                 font.family: theme.font; font.pixelSize: 13
                 clip: true
                 onTextChanged: backend.chatModel.setFilter(text)
@@ -697,7 +729,7 @@ Rectangle {
                 property bool armed: false
                 property bool editing: drawer.editing === chatId
                 onHotChanged: if (!hot) armed = false
-                color: current ? theme.surface : (hot || editing ? "#242427" : "transparent")
+                color: current ? theme.surface : (hot || editing ? theme.rowHot : "transparent")
                 Text {
                     x: 10; y: 6
                     visible: !cRow.editing
@@ -721,12 +753,12 @@ Rectangle {
                     visible: cRow.editing
                     x: 4; y: 3
                     width: parent.width - 12; height: 22; radius: 5
-                    color: "#2e2e32"; border.color: "#4a4a4f"
+                    color: theme.raised; border.color: theme.outline
                     TextInput {
                         id: renameField
                         x: 6; width: parent.width - 12
                         anchors.verticalCenter: parent.verticalCenter
-                        color: theme.text; selectionColor: "#55555c"
+                        color: theme.text; selectionColor: theme.selection
                         font.family: theme.font; font.pixelSize: 13
                         clip: true
                         onVisibleChanged: if (visible) { text = cRow.title; selectAll(); forceActiveFocus() }
@@ -773,7 +805,7 @@ Rectangle {
             anchors.right: chatList.right
             anchors.rightMargin: 2
             width: 3; radius: 1.5
-            color: "#55555a"
+            color: theme.scroll
             visible: chatList.contentHeight > chatList.height
             opacity: chatList.moving ? 0.9 : 0.35
             y: chatList.y + chatList.visibleArea.yPosition * chatList.height
@@ -827,7 +859,7 @@ Rectangle {
         x: (root.width - width) / 2
         y: Math.max(16, Math.min((root.height - height) / 2, 64))   // high enough for the language list
         radius: 14
-        color: "#252528"
+        color: theme.sheet
         border.color: theme.menuLine
         MouseArea { anchors.fill: parent; onClicked: choice.visible = false }
 
@@ -856,7 +888,7 @@ Rectangle {
                 Text { text: tx.assistant; color: theme.dim; font.family: theme.font; font.pixelSize: 12 }
                 Rectangle {
                     width: parent.width; height: 40; radius: 9
-                    color: "#1c1c1e"
+                    color: theme.well
                     Row {
                         x: 3; y: 3
                         Repeater {
@@ -864,7 +896,7 @@ Rectangle {
                             Rectangle {
                                 width: (setCol.width - 6) / Math.max(1, backend.agentList.length); height: 34; radius: 7
                                 property bool sel: backend.agentSetting === modelData.id
-                                color: sel ? "#3a3a3f" : (aMa.containsMouse ? "#2a2a2d" : "transparent")
+                                color: sel ? theme.wellSel : (aMa.containsMouse ? theme.surface : "transparent")
                                 Behavior on color { ColorAnimation { duration: 120 } }
                                 Text {
                                     anchors.centerIn: parent
@@ -935,7 +967,7 @@ Rectangle {
                 Text { text: tx.font; color: theme.dim; font.family: theme.font; font.pixelSize: 12 }
                 Rectangle {
                     width: parent.width; height: 40; radius: 9
-                    color: "#1c1c1e"
+                    color: theme.well
                     Row {
                         x: 3; y: 3
                         Repeater {
@@ -943,7 +975,7 @@ Rectangle {
                             Rectangle {
                                 width: (setCol.width - 6) / 3; height: 34; radius: 7
                                 property bool sel: backend.font === modelData.id
-                                color: sel ? "#3a3a3f" : (fMa.containsMouse ? "#2a2a2d" : "transparent")
+                                color: sel ? theme.wellSel : (fMa.containsMouse ? theme.surface : "transparent")
                                 Behavior on color { ColorAnimation { duration: 120 } }
                                 Text {
                                     anchors.centerIn: parent
@@ -958,10 +990,50 @@ Rectangle {
                 }
             }
 
+            // theme: segmented, each option shows its own background and accent
+            Column {
+                width: parent.width; spacing: 6
+                Text { text: tx.theme; color: theme.dim; font.family: theme.font; font.pixelSize: 12 }
+                Rectangle {
+                    width: parent.width; height: thGrid.height + 6; radius: 9
+                    color: theme.well
+                    Grid {
+                        id: thGrid
+                        x: 3; y: 3; columns: 2
+                        Repeater {
+                            model: backend.themes
+                            Rectangle {
+                                width: (setCol.width - 6) / 2; height: 34; radius: 7
+                                property bool sel: backend.theme === modelData.id
+                                property var pp: root.palettes[modelData.id]
+                                color: sel ? theme.wellSel : (thmMa.containsMouse ? theme.surface : "transparent")
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                                Row {
+                                    anchors.centerIn: parent
+                                    spacing: 6
+                                    Rectangle {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: 12; height: 12; radius: 6
+                                        color: Qt.tint("#1e1e20", parent.parent.pp.tint)
+                                        border.color: parent.parent.pp.accent; border.width: 3
+                                    }
+                                    Text {
+                                        text: modelData.label
+                                        color: parent.parent.sel ? theme.text : theme.dim
+                                        font.family: theme.font; font.pixelSize: 12
+                                    }
+                                }
+                                MouseArea { id: thmMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: backend.setTheme(modelData.id) }
+                            }
+                        }
+                    }
+                }
+            }
+
             Rectangle {
                 width: parent.width; height: 36; radius: 8
-                color: doneMa.containsMouse ? "#ffffff" : "#ececee"
-                Text { anchors.centerIn: parent; text: tx.done; color: "#1e1e20"; font.family: theme.font; font.pixelSize: 13; font.weight: Font.Medium }
+                color: doneMa.containsMouse ? theme.accentHover : theme.accent
+                Text { anchors.centerIn: parent; text: tx.done; color: theme.onAccent; font.family: theme.font; font.pixelSize: 13; font.weight: Font.Medium }
                 MouseArea { id: doneMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: settings.open = false }
             }
 
@@ -1026,7 +1098,7 @@ Rectangle {
         property string text: ""
         visible: false
         z: 100
-        color: "#0f0f10"
+        color: theme.tip
         radius: 6
         width: tipText.implicitWidth + 16
         height: tipText.implicitHeight + 10
@@ -1169,7 +1241,7 @@ Rectangle {
         property var tipItem: null
         signal clicked()
         width: 32; height: 32; radius: 6
-        color: sbMa.containsMouse ? "#343438" : "#2a2a2d"
+        color: sbMa.containsMouse ? theme.hover : theme.surface
         Image {
             anchors.centerIn: parent
             source: Qt.resolvedUrl("icons/" + sb.iconName + ".svg")
@@ -1191,7 +1263,7 @@ Rectangle {
         property alias hovered: aiMa.containsMouse
         signal clicked()
         width: 24; height: 24; radius: 5
-        color: aiMa.containsMouse ? "#2e2e32" : "transparent"
+        color: aiMa.containsMouse ? theme.raised : "transparent"
         Image {
             anchors.centerIn: parent
             source: Qt.resolvedUrl("icons/" + ai.iconName + ".svg")
@@ -1229,7 +1301,7 @@ Rectangle {
                     height: 26
                     width: ucRow.width + 20
                     radius: 7
-                    color: ucMa.containsMouse ? "#424247" : "#38383c"
+                    color: ucMa.containsMouse ? theme.chipHover : theme.chip
                     Behavior on color { ColorAnimation { duration: 120 } }
                     Row {
                         id: ucRow
@@ -1262,7 +1334,7 @@ Rectangle {
                     readOnly: true; selectByMouse: true
                     wrapMode: TextEdit.Wrap
                     color: theme.text
-                    selectionColor: "#55555c"
+                    selectionColor: theme.selection
                     font.family: theme.font; font.pixelSize: theme.fs
                     Text { id: measure; visible: false; text: mText; font: ut.font }
                 }
@@ -1286,7 +1358,7 @@ Rectangle {
                 readOnly: true; selectByMouse: true
                 wrapMode: TextEdit.Wrap
                 color: theme.body
-                selectionColor: "#55555c"
+                selectionColor: theme.selection
                 font.family: theme.font; font.pixelSize: theme.fs
                 onLinkActivated: function(link) { backend.openUrl(link) }
             }
@@ -1356,14 +1428,14 @@ Rectangle {
                 width: ratio >= 1 ? side : side * ratio
                 height: ratio >= 1 ? side / ratio : side
                 radius: 10
-                color: "#151517"
+                color: theme.imageBg
                 Image {
                     anchors.fill: parent
                     source: probe.status === Image.Ready ? backend.thumb(mImage, Math.round(frame.width), Math.round(frame.height), 10) : ""
                     smooth: true; mipmap: true
                     asynchronous: true
                 }
-                Rectangle { anchors.fill: parent; radius: parent.radius; color: "transparent"; border.color: imgMa.containsMouse ? "#4a4a4f" : theme.line }
+                Rectangle { anchors.fill: parent; radius: parent.radius; color: "transparent"; border.color: imgMa.containsMouse ? theme.outline : theme.line }
                 MouseArea { id: imgMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: backend.openUrl(mImage) }
             }
         }
@@ -1390,7 +1462,7 @@ Rectangle {
                     smooth: true; mipmap: true
                     asynchronous: true
                 }
-                Rectangle { anchors.fill: parent; radius: parent.radius; color: "transparent"; border.color: uMa.containsMouse ? "#4a4a4f" : theme.line }
+                Rectangle { anchors.fill: parent; radius: parent.radius; color: "transparent"; border.color: uMa.containsMouse ? theme.outline : theme.line }
                 MouseArea { id: uMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: backend.openUrl(mImage) }
             }
         }

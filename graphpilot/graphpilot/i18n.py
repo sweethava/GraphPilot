@@ -427,6 +427,12 @@ for _k, _vals in _FOCUS.items():
     S[_k].update(dict(zip(_FOCUS_KEYS, _vals)))
 
 
+# ---- colour theme picker
+_THEME = {'en': 'Theme', 'ru': 'Тема', 'uk': 'Тема', 'de': 'Design', 'es': 'Tema', 'fr': 'Thème', 'pt': 'Tema', 'zh': '主题', 'ja': 'テーマ', 'ko': '테마'}
+for _k, _v in _THEME.items():
+    S[_k]["theme"] = _v
+
+
 def system_lang():
     code = QLocale.system().name().split("_")[0].lower()
     return code if code in S else "en"

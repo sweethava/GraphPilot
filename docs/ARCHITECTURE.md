@@ -198,7 +198,7 @@ Renders the AI asked to show (`show: true`) are saved there too; other tool resu
 - `startSetup(aid)` is the same flow started from Settings.
 
 **Settings** live in `QSettings("GraphPilot", "GraphPilot")`: `agent`, `model/<agent>`, `language`
-(`auto` or a code), `font` (`onest / inter / system`), `resolved/<alias>`.
+(`auto` or a code), `font` (`onest / inter / system`), `theme` (`graphite / designer / midnight / ember`), `resolved/<alias>`.
 
 ## 6. UI (`chat.qml`)
 
@@ -206,7 +206,10 @@ Renders the AI asked to show (`show: true`) are saved there too; other tool resu
   (buttons, menus, tooltips, scrollbars) is built from `Rectangle`, `Text`, `MouseArea` and anchors.
   `pixelSize` must be an int.
 - One file. Main blocks, top to bottom:
-  - `theme` (colors, font);
+  - `palettes` + `theme` (colors, font). A palette is only `{tint, accent, accentHover, onAccent, ok}`: every
+    grey role in `theme` is a neutral value passed through `root.tone()` (`Qt.tint` toward the palette's tint;
+    text gets a third of it). Use `theme.<role>` for every colour; add new greys as roles, never as hex in place.
+    The theme list and labels are `THEMES` in `chat_qml.py`;
   - `header`;
   - `list` (ListView of messages, with delegates `userMsg / botMsg / toolMsg / imageMsg / userImageMsg / errorMsg`);
   - welcome screen (logo + greeting);
