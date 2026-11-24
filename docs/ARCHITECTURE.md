@@ -220,7 +220,7 @@ Renders the AI asked to show (`show: true`) are saved there too; other tool resu
 - Strings: `tx.<key>` (= `backend.tr`, a map from `i18n.py`).
 - Images loaded with `cache: false` where they change during development (hot reload).
 - `clip` in QtQuick is rectangular, so rounded images go through `backend.thumb(url, w, h, radius)`: a cropped 2x copy with rounded corners, cached in `DATA_DIR/thumbs`.
-- Mouse-wheel speed: `WheelScroll` (a button-less MouseArea over a list) scrolls ~150 px per notch with a short glide.
+- Mouse-wheel speed: `WheelScroll` (a button-less MouseArea over a list) scrolls ~112 px per notch with a short glide.
 - `create_dock` adds `?v=<mtime>` to the QML URL, because Qt caches compiled QML per process.
 
 ## 7. Strings (`i18n.py`)

@@ -1044,7 +1044,7 @@ Rectangle {
 
     // ============================================================ components
     // Menu that sizes itself to its widest row. items: [{id, label, hint?, icon?}]
-    // Mouse wheel: ~150 px per notch with a short glide (the default Flickable step is tiny).
+    // Mouse wheel: ~112 px per notch with a short glide (the default Flickable step is tiny).
     // Takes no buttons and no hover, so clicks, text selection and hover reach the items below.
     component WheelScroll: MouseArea {
         id: ws
@@ -1057,7 +1057,7 @@ Rectangle {
             var minY = v.originY - v.topMargin
             var maxY = Math.max(minY, v.originY + v.contentHeight + v.bottomMargin - v.height)
             var touchpad = wheel.pixelDelta.y !== 0
-            var dy = touchpad ? wheel.pixelDelta.y : wheel.angleDelta.y / 120 * 150
+            var dy = touchpad ? wheel.pixelDelta.y : wheel.angleDelta.y / 120 * 112
             goal = Math.max(minY, Math.min(maxY, (wsAnim.running ? goal : v.contentY) - dy))
             v.cancelFlick()
             if (touchpad) { wsAnim.stop(); v.contentY = goal }
@@ -1297,8 +1297,11 @@ Rectangle {
                 anchors.topMargin: 6
                 spacing: 2
                 // hide actions while this message is still streaming
-                visible: !(backend.busy && mIndex === root.lastAssistant)
-                height: visible ? 24 : 0
+                // sized from the condition, not .visible: a row that isn't shown yet reports visible=false,
+                // and the delegate would keep the height without the actions (next message overlaps them)
+                property bool shown: !(backend.busy && mIndex === root.lastAssistant)
+                visible: shown
+                height: shown ? 24 : 0
                 ActionIcon {
                     iconName: bm.copied ? "check" : "copy"
                     tip: tx.copy; tipItem: tooltip
