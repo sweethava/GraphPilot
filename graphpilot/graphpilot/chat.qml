@@ -36,8 +36,8 @@ Rectangle {
 
     Connections {
         target: backend
-        function onMessageAppended(role, text, image) {
-            messages.append({ role: role, text: text, image: image })
+        function onMessageAppended(role, text, image, chip) {
+            messages.append({ role: role, text: text, image: image, chip: chip || "" })
             if (role === "assistant") root.lastAssistant = messages.count - 1
             list.stickToBottom()
         }
@@ -173,6 +173,7 @@ Rectangle {
                 active: !row.isTool || root.showSteps
                 property string mText: model.text
                 property string mImage: model.image
+                property string mChip: model.chip !== undefined ? model.chip : ""
                 property int mIndex: index
                 sourceComponent: model.role === "user" ? userMsg
                                : model.role === "assistant" ? botMsg
@@ -204,6 +205,12 @@ Rectangle {
                 }
             }
         }
+    }
+
+    WheelScroll {
+        anchors.fill: list
+        view: list
+        onScrolled: list.atBottom = (goal + list.height >= list.contentHeight + list.bottomMargin - 30)
     }
 
     // thin scrollbar
@@ -391,9 +398,7 @@ Rectangle {
                     clip: true
                     Image {
                         anchors.fill: parent
-                        source: modelData
-                        fillMode: Image.PreserveAspectCrop
-                        sourceSize.width: 112
+                        source: backend.thumb(modelData, 56, 56, 8)
                         smooth: true; mipmap: true; asynchronous: true
                     }
                     MouseArea { id: thMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: backend.openUrl(modelData) }
@@ -761,6 +766,7 @@ Rectangle {
             }
             }
         }
+        WheelScroll { anchors.fill: chatList; view: chatList }
 
         // thin scrollbar for the chat list
         Rectangle {
@@ -1038,6 +1044,30 @@ Rectangle {
 
     // ============================================================ components
     // Menu that sizes itself to its widest row. items: [{id, label, hint?, icon?}]
+    // Mouse wheel: ~150 px per notch with a short glide (the default Flickable step is tiny).
+    // Takes no buttons and no hover, so clicks, text selection and hover reach the items below.
+    component WheelScroll: MouseArea {
+        id: ws
+        property var view
+        property real goal: 0
+        signal scrolled()
+        acceptedButtons: Qt.NoButton
+        onWheel: function(wheel) {
+            var v = view
+            var minY = v.originY - v.topMargin
+            var maxY = Math.max(minY, v.originY + v.contentHeight + v.bottomMargin - v.height)
+            var touchpad = wheel.pixelDelta.y !== 0
+            var dy = touchpad ? wheel.pixelDelta.y : wheel.angleDelta.y / 120 * 150
+            goal = Math.max(minY, Math.min(maxY, (wsAnim.running ? goal : v.contentY) - dy))
+            v.cancelFlick()
+            if (touchpad) { wsAnim.stop(); v.contentY = goal }
+            else { wsAnim.to = goal; wsAnim.restart() }
+            wheel.accepted = true
+            ws.scrolled()
+        }
+        NumberAnimation { id: wsAnim; target: ws.view; property: "contentY"; duration: 180; easing.type: Easing.OutCubic }
+    }
+
     component PopupMenu: Rectangle {
         id: pm
         property var items: []
@@ -1184,13 +1214,46 @@ Rectangle {
                 id: ub
                 anchors.right: parent.right
                 anchors.rightMargin: 14
-                width: ut.width + 24
-                height: ut.height + 18
+                width: Math.max(ut.visible ? ut.width : 0, uchip.visible ? uchip.width : 0) + 24
+                height: (uchip.visible ? uchip.height : 0) + (uchip.visible && ut.visible ? 8 : 0)
+                        + (ut.visible ? ut.height : 0) + 18
                 radius: 8
                 color: theme.surface
+                // attached nodes: same chip as in the composer; click shows them in the graph
+                Rectangle {
+                    id: uchip
+                    visible: mChip !== ""
+                    x: 12; y: 9
+                    height: 26
+                    width: ucRow.width + 20
+                    radius: 7
+                    color: ucMa.containsMouse ? "#424247" : "#38383c"
+                    Behavior on color { ColorAnimation { duration: 120 } }
+                    Row {
+                        id: ucRow
+                        anchors.centerIn: parent
+                        spacing: 6
+                        Image { anchors.verticalCenter: parent.verticalCenter; source: root.icon("node"); sourceSize: Qt.size(14, 14); width: 14; height: 14 }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: mChip
+                            color: theme.text; font.family: theme.font; font.pixelSize: 12
+                        }
+                    }
+                    MouseArea {
+                        id: ucMa
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: { tooltip.hide(); backend.focusMessageNodes(mIndex) }
+                        onContainsMouseChanged: containsMouse ? tooltip.showFor(uchip, tx.show_nodes) : tooltip.hide()
+                    }
+                }
                 TextEdit {
                     id: ut
-                    x: 12; y: 9
+                    visible: mText !== ""
+                    x: 12
+                    y: uchip.visible ? uchip.y + uchip.height + 8 : 9
                     property real maxW: root.width * 0.78 - 24
                     width: Math.min(measure.implicitWidth + 2, maxW)
                     text: mText
@@ -1272,29 +1335,30 @@ Rectangle {
         }
     }
 
+    // Images are shown through backend.thumb(): a cropped copy with real rounded corners
+    // (QtQuick's clip is rectangular). `probe` only reads the aspect ratio.
     Component {
         id: imageMsg
         Item {
             width: parent ? parent.width : 0
             height: frame.height
+            Image { id: probe; visible: false; source: mImage; sourceSize.width: 64; asynchronous: true }
             Rectangle {
                 id: frame
                 x: 16
-                width: Math.min(240, parent.width - 34)
-                height: width
+                property real ratio: probe.implicitHeight > 0 ? probe.implicitWidth / probe.implicitHeight : 1
+                property real side: Math.min(240, parent.width - 34)
+                width: ratio >= 1 ? side : side * ratio
+                height: ratio >= 1 ? side / ratio : side
                 radius: 10
                 color: "#151517"
-                border.color: imgMa.containsMouse ? "#4a4a4f" : theme.line
-                clip: true
                 Image {
                     anchors.fill: parent
-                    anchors.margins: 1
-                    source: mImage
-                    fillMode: Image.PreserveAspectFit
+                    source: probe.status === Image.Ready ? backend.thumb(mImage, Math.round(frame.width), Math.round(frame.height), 10) : ""
                     smooth: true; mipmap: true
                     asynchronous: true
-                    sourceSize.width: 480
                 }
+                Rectangle { anchors.fill: parent; radius: parent.radius; color: "transparent"; border.color: imgMa.containsMouse ? "#4a4a4f" : theme.line }
                 MouseArea { id: imgMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: backend.openUrl(mImage) }
             }
         }
@@ -1305,27 +1369,23 @@ Rectangle {
         Item {
             width: parent ? parent.width : 0
             height: uframe.height
+            Image { id: uprobe; visible: false; source: mImage; sourceSize.width: 64; asynchronous: true }
             Rectangle {
                 id: uframe
                 anchors.right: parent.right
                 anchors.rightMargin: 14
-                property real ratio: uimg.implicitHeight > 0 ? uimg.implicitWidth / uimg.implicitHeight : 1.6
+                property real ratio: uprobe.implicitHeight > 0 ? uprobe.implicitWidth / uprobe.implicitHeight : 1.6
                 width: Math.min(220, root.width * 0.7, height * ratio)
                 height: Math.min(150, 220 / Math.max(ratio, 0.01))
                 radius: 8
                 color: theme.surface
-                border.color: uMa.containsMouse ? "#4a4a4f" : theme.line
-                clip: true
                 Image {
-                    id: uimg
                     anchors.fill: parent
-                    anchors.margins: 1
-                    source: mImage
-                    fillMode: Image.PreserveAspectCrop
+                    source: uprobe.status === Image.Ready ? backend.thumb(mImage, Math.round(uframe.width), Math.round(uframe.height), 8) : ""
                     smooth: true; mipmap: true
                     asynchronous: true
-                    sourceSize.width: 440
                 }
+                Rectangle { anchors.fill: parent; radius: parent.radius; color: "transparent"; border.color: uMa.containsMouse ? "#4a4a4f" : theme.line }
                 MouseArea { id: uMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: backend.openUrl(mImage) }
             }
         }

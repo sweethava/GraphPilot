@@ -73,6 +73,7 @@ GRAPH = s("Graph identifier (default: graph currently open in Designer)")
 
 
 def _render(a):
+    a = {k: v for k, v in a.items() if k != "show"}     # `show` is for the chat panel only
     r = call("render_node", a)
     p = ((r.get("result") or {}) if r.get("ok") else {}).get("path") or ""
     if p.lower().endswith(".png") and os.path.exists(p):
@@ -135,8 +136,11 @@ TOOLS = [
      S({"path": s("optional .sbs path"), "graph_id": GRAPH}), lambda a: call("save_package", a)),
     ("sd_render_node",
      "Compute the graph and return a node output as an image (so you can see it). "
-     "Optionally keep a file at `path` (png/tga/exr...).",
+     "Optionally keep a file at `path` (png/tga/exr...). The user doesn't see the image unless `show` is true.",
      S({"node_id": s(), "output": s("output id (default first)"), "path": s("save path"),
+        "show": {"type": "boolean", "description": "Also show the image to the user in the chat. Default false: "
+                 "renders are for you to check your work. Set true only for a final result worth showing, "
+                 "or when the user asks to see something."},
         "max_size": n("downscale preview to this many px (default 1024)"), "graph_id": GRAPH}, ["node_id"]),
      _render),
 ]

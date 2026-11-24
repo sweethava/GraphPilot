@@ -101,7 +101,7 @@ delete_nodes, move_node, new_graph, open_package, save_package, render_node`.
 - It speaks MCP JSON-RPC over stdio (`initialize`, `tools/list`, `tools/call`, `ping`).
 - `_bridge()` re-reads `bridge.json` on **every** call (the token changes each Designer start); the env vars
   `SD_BRIDGE_PORT` / `SD_BRIDGE_TOKEN` override it.
-- `sd_render_node` returns the PNG as an MCP image block, so the model can actually see the render.
+- `sd_render_node` returns the PNG as an MCP image block, so the model can actually see the render. Its `show` flag (default false) decides whether the panel also shows the image to the user; the server drops it before calling the bridge.
 - The server is registered per run on the command line (no `claude mcp add` / no edits to the user's config):
   Claude gets `--mcp-config <json> --strict-mcp-config`; Codex gets `-c mcp_servers.sd.*`.
 
@@ -165,7 +165,7 @@ A `QObject` exposed to QML as `backend` (context property). QML reads `Property`
    pill and phase (`thinking / tool / writing`).
 4. `done` → the status pill shows "Model · time"; `_on_finished` saves the chat.
 
-**Messages.** Everything shown goes through `_emit(role, text, image)` (roles: `user, userimage, assistant,
+**Messages.** Everything shown goes through `_emit(role, text, image, nodes=None)` (roles: `user, userimage, assistant,
 tool, image, error`). It appends to `_msgs` (saved to disk) and emits `messageAppended` for QML. Streaming text
 updates the last assistant message via `lastTextUpdated`. `pretty_md()` rewrites Markdown lists because Qt's
 Markdown renderer indents them badly.
@@ -181,7 +181,9 @@ late events never leak into another chat.
 
 **Screenshots.** Ctrl+V (`pasteImage`), drag & drop (`addFiles`), the + menu (`pickImages`, `grabDesigner`).
 Files are saved to `DATA_DIR/images` (kept so history thumbnails survive restarts). Max 6 per message.
-Render results from tools are saved there too.
+Renders the AI asked to show (`show: true`) are saved there too; other tool results are not shown (`_quiet_results`).
+
+**Node chips.** A sent message keeps its attached nodes as `nodes = {label, graph, ids}` in the chat file; QML shows a chip that calls `focusMessageNodes(index)` → `helpers.focus_nodes`. Older chats stored the chip as a "📎 label" text prefix; `_legacy_chip` / `_recover_chip_ids` convert them on open.
 
 **Setup flow (install / sign in).**
 - `_states` caches each agent's state; `refreshAgents()` re-checks in a background thread
@@ -217,6 +219,8 @@ Render results from tools are saved there too.
   - `tooltip`.
 - Strings: `tx.<key>` (= `backend.tr`, a map from `i18n.py`).
 - Images loaded with `cache: false` where they change during development (hot reload).
+- `clip` in QtQuick is rectangular, so rounded images go through `backend.thumb(url, w, h, radius)`: a cropped 2x copy with rounded corners, cached in `DATA_DIR/thumbs`.
+- Mouse-wheel speed: `WheelScroll` (a button-less MouseArea over a list) scrolls ~150 px per notch with a short glide.
 - `create_dock` adds `?v=<mtime>` to the QML URL, because Qt caches compiled QML per process.
 
 ## 7. Strings (`i18n.py`)

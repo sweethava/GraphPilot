@@ -4,6 +4,7 @@ Python = backend (runs `claude -p` with stream-json, parses events, stores chats
 QML (chat.qml) = UI. Falls back to the widget panel if QML fails.
 """
 import base64
+import hashlib
 import datetime
 import json
 import os
@@ -44,6 +45,7 @@ else:
 CHAT_DIR = os.path.join(DATA_DIR, "chats")
 INDEX_PATH = os.path.join(CHAT_DIR, "index.json")
 IMG_DIR = os.path.join(DATA_DIR, "images")   # persistent, so history thumbnails survive restarts
+THUMB_DIR = os.path.join(DATA_DIR, "thumbs")  # rounded display copies (QtQuick clip is always rectangular)
 IMG_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".webp", ".gif", ".tga", ".tif", ".tiff"}
 MAX_IMAGES = 6
 FONTS = ["onest", "inter", "system"]
@@ -230,7 +232,7 @@ class ChatListModel(QtCore.QAbstractListModel):
 
 # ======================================================================= backend
 class ChatBackend(QObject):
-    messageAppended = Signal(str, str, str)   # role, text, imageUrl
+    messageAppended = Signal(str, str, str, str)   # role, text, imageUrl, node chip label
     lastTextUpdated = Signal(str)
     busyChanged = Signal()
     statusChanged = Signal()
@@ -769,10 +771,66 @@ class ChatBackend(QObject):
         except Exception as e:
             print("[GraphPilot] index write failed:", e)
 
-    def _emit(self, role, text="", image=""):
-        """Show a message and record it in the current chat."""
-        self._msgs.append({"role": role, "text": text, "image": image})
-        self.messageAppended.emit(role, text, image)
+    def _emit(self, role, text="", image="", nodes=None):
+        """Show a message and record it in the current chat. nodes = {label, graph, ids} of attached nodes."""
+        m = {"role": role, "text": text, "image": image}
+        if nodes:
+            m["nodes"] = nodes
+        self._msgs.append(m)
+        self.messageAppended.emit(role, text, image, (nodes or {}).get("label", ""))
+
+    @staticmethod
+    def _legacy_chip(m):
+        """Older chats kept the node attachment as a '📎 label\n\n' prefix of the text."""
+        t = m.get("text") or ""
+        if m.get("role") == "user" and not m.get("nodes") and t.startswith("📎 "):
+            label, _, rest = t[2:].partition("\n\n")
+            m["nodes"], m["text"] = {"label": label.strip()}, rest
+
+    @staticmethod
+    def _recover_chip_ids(msgs, last_prompt):
+        """Older chats didn't store node ids with the chip; the last prompt still has them."""
+        m = re.match(r"\[Selected nodes in graph (.+?): (.*)\]\n", last_prompt or "")
+        if not m:
+            return
+        ids = re.findall(r"id=([^)]+)\)", m.group(2))
+        for msg in reversed(msgs):
+            n = msg.get("nodes")
+            if msg.get("role") == "user" and n:
+                if not n.get("ids") and ids:
+                    n["graph"], n["ids"] = m.group(1), ids
+                return
+
+    @Slot(str, int, int, int, result=str)
+    def thumb(self, url, w, h, radius):
+        """A copy of an image cropped to w x h with rounded corners (2x, cached), for display."""
+        path = QUrl(url).toLocalFile() if url.startswith("file:") else url
+        if w <= 0 or h <= 0 or not path or not os.path.isfile(path):
+            return url
+        try:
+            key = "%s|%s|%d|%d|%d" % (path, os.path.getmtime(path), w, h, radius)
+            out = os.path.join(THUMB_DIR, hashlib.md5(key.encode("utf-8")).hexdigest()[:20] + ".png")
+            if not os.path.isfile(out):
+                img = QtGui.QImage(path)
+                if img.isNull():
+                    return url
+                W, H = w * 2, h * 2
+                sc = img.scaled(W, H, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+                sc = sc.copy((sc.width() - W) // 2, (sc.height() - H) // 2, W, H)
+                canvas = QtGui.QImage(W, H, QtGui.QImage.Format_ARGB32_Premultiplied)
+                canvas.fill(Qt.transparent)
+                p = QtGui.QPainter(canvas)
+                p.setRenderHint(QtGui.QPainter.Antialiasing)
+                p.setPen(Qt.NoPen)
+                p.setBrush(QtGui.QBrush(sc))
+                p.drawRoundedRect(QtCore.QRectF(0, 0, W, H), radius * 2, radius * 2)
+                p.end()
+                os.makedirs(THUMB_DIR, exist_ok=True)
+                canvas.save(out)
+            return QUrl.fromLocalFile(out).toString()
+        except Exception as e:
+            print("[GraphPilot] thumb failed:", e)
+            return url
 
     def _auto_title(self):
         for m in self._msgs:
@@ -876,7 +934,11 @@ class ChatBackend(QObject):
         self._last_prompt = d.get("last_prompt") or ""
         self._msgs = list(d.get("messages") or [])
         for m in self._msgs:
-            self.messageAppended.emit(m.get("role", ""), m.get("text", ""), m.get("image", ""))
+            self._legacy_chip(m)
+        self._recover_chip_ids(self._msgs, self._last_prompt)
+        for m in self._msgs:
+            self.messageAppended.emit(m.get("role", ""), m.get("text", ""), m.get("image", ""),
+                                      (m.get("nodes") or {}).get("label", ""))
         self._chat_model.refresh(cid)
 
     @Slot(str, str)
@@ -1058,12 +1120,23 @@ class ChatBackend(QObject):
         self.attachmentChanged.emit()
 
     @Slot()
-    def focusAttachment(self, _retry=0):
-        """Node chip clicked: show those nodes in the graph view (open the graph, fit, select)."""
-        if not self._attach_nodes:
-            return
+    def focusAttachment(self):
+        """Node chip in the composer clicked: show those nodes in the graph."""
+        if self._attach_nodes:
+            self._focus_nodes(*self._attach_nodes)
+
+    @Slot(int)
+    def focusMessageNodes(self, idx):
+        """Node chip in a sent message clicked."""
+        n = (self._msgs[idx].get("nodes") or {}) if 0 <= idx < len(self._msgs) else {}
+        if n.get("ids"):
+            self._focus_nodes(n.get("graph"), n["ids"])
+        elif n:
+            self._set_status(self.t("nodes_gone"))
+
+    def _focus_nodes(self, gid, ids, _retry=0):
+        """Open the graph, fit the nodes in view and select them."""
         from . import helpers
-        gid, ids = self._attach_nodes
         try:
             r = helpers.focus_nodes(ids, gid)
         except BaseException as e:   # graph closed / renamed
@@ -1072,7 +1145,7 @@ class ChatBackend(QObject):
         if not r.get("found"):
             self._set_status(self.t("nodes_gone"))
         elif r.get("pending") and _retry < 5:   # graph is being opened: wait for its view
-            QtCore.QTimer.singleShot(250, lambda: self.focusAttachment(_retry + 1))
+            QtCore.QTimer.singleShot(250, lambda: self._focus_nodes(gid, ids, _retry + 1))
 
     @Slot(str)
     def copyText(self, text):
@@ -1094,11 +1167,13 @@ class ChatBackend(QObject):
             return
         for p in self._images:
             self._emit("userimage", "", QUrl.fromLocalFile(p).toString())
-        shown = text
+        nodes = None
         if self._attach_label:
-            shown = ("📎 " + self._attach_label + "\n\n" + text).strip()
-        if shown:
-            self._emit("user", shown, "")
+            nodes = {"label": self._attach_label}
+            if self._attach_nodes:
+                nodes["graph"], nodes["ids"] = self._attach_nodes[0], list(self._attach_nodes[1])
+        if text or nodes:
+            self._emit("user", text, "", nodes)
         prompt = self._attach + (text or self.t("look_at_images"))
         images = list(self._images)
         self.clearAttachment()
@@ -1237,6 +1312,15 @@ class ChatBackend(QObject):
         elif t == "thinking":
             self._set_status(self.t("thinking"), "thinking")
         elif t == "tool":
+            inp = e.get("input") or {}
+            if isinstance(inp, str):
+                try:
+                    inp = json.loads(inp)
+                except ValueError:
+                    inp = {}
+                e["input"] = inp
+            if not (isinstance(inp, dict) and inp.get("show") is True):
+                self._quiet_results.add(e.get("id"))  # renders are for the AI unless it asks to show them
             self._close_live()
             self._emit("tool", self._tool_label(e["name"], e.get("input") or {}))
             self._set_status("⚙ " + e["name"], "tool")

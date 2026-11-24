@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Faster mouse-wheel scrolling in the chat and the chat list (about 150 px per notch, with a short glide).
+- Renders the assistant makes to check its own work are no longer dumped into the chat. It shows an image only for a final result or when you ask to see something.
+- Images in the chat now really have rounded corners.
+- Attached nodes in a sent message are shown as the same chip as in the message box (icon instead of the 📎 emoji). Click it to show those nodes in the graph.
+
 ## 1.2.1 — 2026-11-24
 
 - Fix: the selected-nodes chip now shows up on its own (before, it only appeared together with a screenshot).
