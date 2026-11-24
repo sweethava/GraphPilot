@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.2 — 2026-11-24
 
 - Faster mouse-wheel scrolling in the chat and the chat list (about 112 px per notch, with a short glide).
 - Renders the assistant makes to check its own work are no longer dumped into the chat. It shows an image only for a final result or when you ask to see something.
