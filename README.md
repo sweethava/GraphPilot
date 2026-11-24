@@ -4,7 +4,22 @@
 
 Works with **[Claude Code](https://claude.com/claude-code)**, so it runs on your existing Claude subscription (Pro / Max) or an Anthropic API key. No extra accounts, no extra servers.
 
-<!-- TODO: hero GIF / screenshot here -->
+<p align="center">
+  <img src="docs/images/chat.png" width="380" alt="GraphPilot builds a brick material and shows the render">
+</p>
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/images/attach.png" width="260" alt="Attach screenshots"><br><sub>Attach screenshots or selected nodes</sub></td>
+    <td align="center"><img src="docs/images/chats.png" width="260" alt="Chat history"><br><sub>Chat history with search</sub></td>
+    <td align="center"><img src="docs/images/models.png" width="260" alt="Model picker"><br><sub>Always the newest models</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/images/settings.png" width="260" alt="Settings"><br><sub>Fonts: Onest, Inter, system</sub></td>
+    <td align="center"><img src="docs/images/languages.png" width="260" alt="Languages"><br><sub>10 interface languages</sub></td>
+    <td></td>
+  </tr>
+</table>
 
 ## Features
 

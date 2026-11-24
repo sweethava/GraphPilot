@@ -45,23 +45,23 @@ def to_py(o, depth=0):
     if cls == "SDValueEnum":
         try:
             return {"enum": o.getValueId(), "value": o.get()}
-        except Exception:
+        except BaseException:
             return o.get()
     if cls == "SDValueArray" or cls == "SDArray":
         try:
             return [to_py(x, depth + 1) for x in o]
-        except Exception:
+        except BaseException:
             return str(o)
     if cls == "SDValueStruct":
         try:
             props = o.getType().getProperties()
             return {p.getId(): to_py(o.getPropertyValue(p), depth + 1) for p in props}
-        except Exception:
+        except BaseException:
             return str(o)
     if cls.startswith("SDValue") and hasattr(o, "get"):
         try:
             return to_py(o.get(), depth + 1)
-        except Exception:
+        except BaseException:
             return str(o)
     if cls == "SDTexture":
         return "<SDTexture %s>" % to_py(o.getSize())
@@ -70,7 +70,7 @@ def to_py(o, depth=0):
     if hasattr(o, "getIdentifier"):
         try:
             return {"type": cls, "identifier": o.getIdentifier()}
-        except Exception:
+        except BaseException:
             pass
     return str(o)
 
@@ -85,7 +85,7 @@ def make_value(type_id, v):
     try:
         mod = importlib.import_module("sd.api.sdvalue" + type_id.lower())
         cls = getattr(mod, "SDValue" + name)
-    except Exception:
+    except BaseException:
         # probably an enum type
         from sd.api.sdvalueenum import SDValueEnum
         if isinstance(v, str):
@@ -129,7 +129,7 @@ def _open_in_editor(res):
         _LAST_GRAPH = res
     try:
         _app().getUIMgr().openResourceInEditor(res)
-    except Exception as e:
+    except BaseException as e:
         print("openResourceInEditor failed: %s" % e)
 
 
@@ -140,7 +140,7 @@ def _iter_resources(pkg):
         yield r
         try:
             stack.extend(r.getChildren(False))
-        except Exception:
+        except BaseException:
             pass
 
 
@@ -174,7 +174,7 @@ def _prop_info(n, p, with_value=True):
     if with_value:
         try:
             d["value"] = to_py(n.getPropertyValue(p))
-        except Exception as e:
+        except BaseException as e:
             d["value"] = "<%s>" % e
     return d
 
@@ -248,6 +248,12 @@ def _library_resource(name, graph_name=None):
     if pkg is None:
         raise RuntimeError("could not load %s" % path)
     graphs = [r for r in _iter_resources(pkg) if hasattr(r, "getNodes")]
+    # only compositing graphs can be instanced (packages also hold function graphs, often listed first);
+    # prefer the one named like the package
+    comp = [r for r in graphs if type(r).__name__ == "SDSBSCompGraph"]
+    base = os.path.splitext(os.path.basename(path))[0].lower()
+    comp.sort(key=lambda r: (r.getIdentifier().lower() != base, r.getIdentifier().lower() not in base))
+    graphs = comp + [r for r in graphs if r not in comp]
     if graph_name:
         r = pkg.findResourceFromUrl(graph_name)
         if r is None:
@@ -267,7 +273,7 @@ def _apply_params(n, params):
             if p is None:
                 raise RuntimeError("no input property %r" % k)
             n.setInputPropertyValueFromId(k, make_value(p.getType().getId(), v))
-        except Exception as e:
+        except BaseException as e:
             errors[k] = str(e)
     return errors
 
@@ -411,7 +417,7 @@ def _finish_render(path, tex, max_size):
             if not img.isNull() and max(img.width(), img.height()) > max_size:
                 img.scaled(max_size, max_size, Qt.KeepAspectRatio,
                            Qt.SmoothTransformation).save(path)
-        except Exception:
+        except BaseException:
             pass
     return {"path": path, "size": to_py(tex.getSize())}
 

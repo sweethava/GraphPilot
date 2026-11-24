@@ -416,7 +416,7 @@ class ChatBackend(QObject):
         try:
             g = self.ui_mgr.getCurrentGraph() if self.ui_mgr else None
             return g.getIdentifier() if g is not None else ""
-        except Exception:
+        except BaseException:  # sd.api errors are BaseException
             return ""
 
     graphName = Property(str, _get_graph, notify=graphChanged)
@@ -727,7 +727,7 @@ class ChatBackend(QObject):
         try:
             nodes = self.ui_mgr.getCurrentGraphSelectedNodes() if self.ui_mgr else None
             g = self.ui_mgr.getCurrentGraph() if self.ui_mgr else None
-        except Exception:
+        except BaseException:  # sd.api errors are BaseException
             nodes, g = None, None
         if not nodes or len(nodes) == 0:
             self._set_status(self.t("nothing_selected"))

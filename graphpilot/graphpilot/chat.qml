@@ -127,7 +127,7 @@ Rectangle {
 
         SquareButton {
             anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
-            iconName: "steps"; tipItem: tooltip
+            iconName: root.showSteps ? "steps" : "steps_off"; tipItem: tooltip
             active: root.showSteps
             tip: root.showSteps ? tx.hide_steps : tx.show_steps
             onClicked: root.showSteps = !root.showSteps
@@ -560,6 +560,7 @@ Rectangle {
                 clip: true
                 onTextChanged: backend.chatModel.setFilter(text)
                 Keys.onEscapePressed: text.length ? text = "" : drawer.open = false
+                Keys.onShortcutOverride: function(e) { if (e.key === Qt.Key_Escape) e.accepted = true }
                 Text { visible: !search.text.length; text: tx.search; color: theme.faint; font: search.font }
             }
             Image {
@@ -584,30 +585,38 @@ Rectangle {
             spacing: 2
             boundsBehavior: Flickable.StopAtBounds
             reuseItems: true
+            interactive: contentHeight > height
             model: backend.chatModel
-            delegate: Rectangle {
+            delegate: Item {
+              // ListView positions delegates at x=0, so the side margin lives inside the delegate
+              width: ListView.view.width; height: 44
+              required property string chatId
+              required property string title
+              required property string when
+              required property bool current
+              Rectangle {
                 id: cRow
-                required property string chatId
-                required property string title
-                required property string when
-                required property bool current
+                property string chatId: parent.chatId
+                property string title: parent.title
+                property string when: parent.when
+                property bool current: parent.current
                 x: 8
-                width: ListView.view.width - 16; height: 44; radius: 8
+                width: parent.width - 16; height: 44; radius: 8
                 property bool hot: cMa.containsMouse || renBtn.hovered || delBtn.hovered || confirm.hovered
                 property bool armed: false
                 property bool editing: drawer.editing === chatId
                 onHotChanged: if (!hot) armed = false
                 color: current ? theme.surface : (hot || editing ? "#242427" : "transparent")
                 Text {
-                    x: 12; y: 6
+                    x: 10; y: 6
                     visible: !cRow.editing
-                    width: parent.width - 24 - (cRow.hot ? (cRow.armed ? confirm.width + 4 : 54) : 0)
+                    width: parent.width - 20 - (cRow.hot ? (cRow.armed ? confirm.width + 4 : 54) : 0)
                     elide: Text.ElideRight
                     text: cRow.title
                     color: theme.text; font.family: theme.font; font.pixelSize: 13
                 }
                 Text {
-                    x: 12; y: 25
+                    x: 10; y: 25
                     text: cRow.when
                     color: theme.faint; font.family: theme.font; font.pixelSize: 11
                 }
@@ -619,7 +628,7 @@ Rectangle {
                 // inline rename
                 Rectangle {
                     visible: cRow.editing
-                    x: 6; y: 3
+                    x: 4; y: 3
                     width: parent.width - 12; height: 22; radius: 5
                     color: "#2e2e32"; border.color: "#4a4a4f"
                     TextInput {
@@ -630,9 +639,12 @@ Rectangle {
                         font.family: theme.font; font.pixelSize: 13
                         clip: true
                         onVisibleChanged: if (visible) { text = cRow.title; selectAll(); forceActiveFocus() }
+                        // only Enter saves; Esc or clicking anywhere else cancels
                         onAccepted: { backend.renameChat(cRow.chatId, text); drawer.editing = "" }
-                        Keys.onEscapePressed: drawer.editing = ""
-                        onActiveFocusChanged: if (!activeFocus && cRow.editing) { backend.renameChat(cRow.chatId, text); drawer.editing = "" }
+                        Keys.onEscapePressed: function(e) { e.accepted = true; drawer.editing = "" }
+                        // claim Esc before Designer's own shortcuts get it
+                        Keys.onShortcutOverride: function(e) { if (e.key === Qt.Key_Escape) e.accepted = true }
+                        onActiveFocusChanged: if (!activeFocus && cRow.editing) drawer.editing = ""
                     }
                 }
                 Row {
@@ -660,6 +672,7 @@ Rectangle {
                     Text { id: cfText; anchors.centerIn: parent; text: tx.delete; color: theme.error; font.family: theme.font; font.pixelSize: 12 }
                     MouseArea { id: cfMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: backend.deleteChat(cRow.chatId) }
                 }
+            }
             }
         }
 

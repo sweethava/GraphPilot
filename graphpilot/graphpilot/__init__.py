@@ -101,7 +101,7 @@ class _Server:
                     raise ValueError("unknown cmd %r" % cmd)
             resp["ok"] = True
             resp["result"] = helpers.to_py(result)
-        except Exception:
+        except BaseException:  # sd.api APIException derives from BaseException, not Exception
             resp["ok"] = False
             resp["error"] = traceback.format_exc()
         resp["stdout"] = out.getvalue()
