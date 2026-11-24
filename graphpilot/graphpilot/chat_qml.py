@@ -20,6 +20,18 @@ from . import agents
 from . import i18n
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+REPO_URL = "https://github.com/sweethava/GraphPilot"
+
+
+def _plugin_version():
+    try:
+        with open(os.path.join(os.path.dirname(HERE), "pluginInfo.json"), encoding="utf-8") as f:
+            return str(json.load(f).get("version") or "")
+    except Exception:
+        return ""
+
+
+VERSION = _plugin_version()
 if os.environ.get("APPDATA"):
     DATA_DIR = os.path.join(os.environ["APPDATA"], "GraphPilot")
 elif sys.platform == "darwin":
@@ -484,6 +496,16 @@ class ChatBackend(QObject):
         return self._chat_model
 
     chatModel = Property(QObject, _get_chat_model, constant=True)
+
+    def _get_version(self):
+        return VERSION
+
+    version = Property(str, _get_version, constant=True)
+
+    def _get_repo_url(self):
+        return REPO_URL
+
+    repoUrl = Property(str, _get_repo_url, constant=True)
 
     def _load_index(self):
         """Read the small index file; rebuild it from chat files only when it's missing or stale."""

@@ -854,6 +854,34 @@ Rectangle {
                 Text { anchors.centerIn: parent; text: tx.done; color: "#1e1e20"; font.family: theme.font; font.pixelSize: 13; font.weight: Font.Medium }
                 MouseArea { id: doneMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: settings.open = false }
             }
+
+            // about: version, author, repo link
+            Row {
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: 4
+                Text {
+                    text: "GraphPilot " + backend.version + " · by SweetHava"
+                    color: theme.dim; opacity: 0.8
+                    font.family: theme.font; font.pixelSize: 11
+                }
+                Text {
+                    text: "·"
+                    color: theme.dim; opacity: 0.8
+                    font.family: theme.font; font.pixelSize: 11
+                }
+                Text {
+                    text: "GitHub ↗"
+                    color: repoMa.containsMouse ? theme.text : theme.dim
+                    font.family: theme.font; font.pixelSize: 11
+                    font.underline: repoMa.containsMouse
+                    MouseArea {
+                        id: repoMa
+                        anchors.fill: parent; anchors.margins: -4
+                        hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                        onClicked: backend.openUrl(backend.repoUrl)
+                    }
+                }
+            }
         }
 
         // language list (drops down over the rest of the card)

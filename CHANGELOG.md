@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Settings: version, author and a link to the GitHub repository.
+
 ## 1.1.1 — 2026-11-24
 
 - Security: the local Designer bridge now requires a per-session random token (stored in `bridge.json` in the GraphPilot data folder). Other users and programs without access to your profile can no longer run code in Designer.
