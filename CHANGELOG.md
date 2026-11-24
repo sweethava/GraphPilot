@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.1 — 2026-11-24
 
 - Fix: the selected-nodes chip now shows up on its own (before, it only appeared together with a screenshot).
 - Click the selected-nodes chip to show those nodes in the graph: the view opens the graph if needed, fits the nodes and selects them.

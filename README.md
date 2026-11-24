@@ -9,7 +9,7 @@
 Works with **[Claude Code](https://claude.com/claude-code)** or **[OpenAI Codex](https://github.com/openai/codex)**, so it runs on the subscription you already have: Claude (Pro / Max) or ChatGPT (Plus / Pro / Business), or an API key. No extra accounts, no extra servers.
 
 <p align="center">
-  <img src="docs/images/chat.png" width="380" alt="GraphPilot builds a brick material and shows the render">
+  <img src="docs/images/chat.png" width="380" alt="GraphPilot explains a roof shingles graph and shows the render">
 </p>
 
 <table>
