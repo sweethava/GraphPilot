@@ -228,8 +228,8 @@ Rectangle {
         Image {
             anchors.horizontalCenter: parent.horizontalCenter
             source: Qt.resolvedUrl("icons/logo.png")
-            width: 56; height: 56
-            smooth: true; mipmap: true
+            width: 63; height: 45      // icons/logo.png is 3x this
+            smooth: true; mipmap: true; cache: false
         }
         Text {
             width: parent.width
